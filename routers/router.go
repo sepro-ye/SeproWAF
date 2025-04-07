@@ -17,6 +17,12 @@ func init() {
 	web.Router("/user/profile", &controllers.UIController{}, "get:UserProfile")
 	web.Router("/admin/users", &controllers.UIController{}, "get:UserList")
 
+	// UI Routes for Site Management (now part of UIController)
+	web.Router("/waf/sites", &controllers.UIController{}, "get:SiteList")
+	web.Router("/waf/sites/new", &controllers.UIController{}, "get:SiteCreate")
+	web.Router("/waf/sites/:id", &controllers.UIController{}, "get:SiteDetail")
+	web.Router("/waf/sites/:id/edit", &controllers.UIController{}, "get:SiteEdit")
+
 	// API Routes
 	// Public API routes
 	web.Router("/api/auth/register", &controllers.AuthController{}, "post:Register")
@@ -29,6 +35,12 @@ func init() {
 	web.Router("/api/auth/logout", &controllers.AuthController{}, "post:Logout")
 	web.Router("/api/user/profile", &controllers.UserController{}, "get:GetProfile")
 	web.Router("/api/user/:id", &controllers.UserController{}, "get:GetUser;put:UpdateUser")
+
+	// API Routes for Site Management
+	web.Router("/api/sites", &controllers.SiteController{}, "get:ListSites;post:CreateSite")
+	web.Router("/api/sites/:id", &controllers.SiteController{}, "get:GetSite;put:UpdateSite;delete:DeleteSite")
+	web.Router("/api/sites/:id/toggle-status", &controllers.SiteController{}, "post:ToggleSiteStatus")
+	web.Router("/api/sites/:id/stats", &controllers.SiteController{}, "get:GetSiteStats")
 
 	// Admin-only API routes
 	web.Router("/api/users", &controllers.UserController{}, "get:GetUsers")

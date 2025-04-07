@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"SeproWAF/models"
+	"strconv"
 	"strings"
 
 	"github.com/beego/beego/v2/client/orm"
@@ -92,6 +93,129 @@ func (c *UIController) UserList() {
 	c.Data["IsAdmin"] = user.IsAdmin()
 	c.Layout = "layout.tpl"
 	c.TplName = "user/list.tpl"
+}
+
+// SITE MANAGEMENT UI METHODS (Integrated from SiteUIController)
+
+// SiteList renders the site list page
+func (c *UIController) SiteList() {
+	// Get authenticated user
+	user := c.GetUserFromJWT()
+	if user == nil {
+		c.Redirect("/auth/login", 302)
+		return
+	}
+
+	c.Data["Title"] = "Protected Sites"
+	c.Data["Username"] = user.Username
+	c.Data["IsAuthenticated"] = true
+	c.Data["IsAdmin"] = user.IsAdmin()
+	c.Layout = "layout.tpl"
+	c.TplName = "site/list.tpl"
+}
+
+// SiteDetail renders the site detail page
+func (c *UIController) SiteDetail() {
+	// Get authenticated user
+	user := c.GetUserFromJWT()
+	if user == nil {
+		c.Redirect("/auth/login", 302)
+		return
+	}
+
+	// Get site ID from URL parameter
+	siteID, err := strconv.Atoi(c.Ctx.Input.Param(":id"))
+	if err != nil {
+		c.Abort("400")
+		return
+	}
+
+	// Get the site
+	site := models.Site{ID: siteID}
+	o := orm.NewOrm()
+	err = o.Read(&site)
+	if err != nil {
+		c.Abort("404")
+		return
+	}
+
+	// Check if user has permission to view the site
+	if !site.CanUserManageSite(user.ID, user.Role) {
+		c.Redirect("/dashboard", 302)
+		return
+	}
+
+	// Get proxy port from configuration
+	proxyPort, err := web.AppConfig.Int("ProxyPort")
+	if err != nil {
+		proxyPort = 8080 // Default fallback value
+	}
+
+	c.Data["Title"] = site.Name + " - Site Details"
+	c.Data["Username"] = user.Username
+	c.Data["IsAuthenticated"] = true
+	c.Data["IsAdmin"] = user.IsAdmin()
+	c.Data["Site"] = site
+	c.Data["ProxyPort"] = proxyPort // Pass the proxy port to the template
+	c.Layout = "layout.tpl"
+	c.TplName = "site/detail.tpl"
+}
+
+// SiteCreate renders the site creation page
+func (c *UIController) SiteCreate() {
+	// Get authenticated user
+	user := c.GetUserFromJWT()
+	if user == nil {
+		c.Redirect("/auth/login", 302)
+		return
+	}
+
+	c.Data["Title"] = "Add New Site"
+	c.Data["Username"] = user.Username
+	c.Data["IsAuthenticated"] = true
+	c.Data["IsAdmin"] = user.IsAdmin()
+	c.Layout = "layout.tpl"
+	c.TplName = "site/create.tpl"
+}
+
+// SiteEdit renders the site edit page
+func (c *UIController) SiteEdit() {
+	// Get authenticated user
+	user := c.GetUserFromJWT()
+	if user == nil {
+		c.Redirect("/auth/login", 302)
+		return
+	}
+
+	// Get site ID from URL parameter
+	siteID, err := strconv.Atoi(c.Ctx.Input.Param(":id"))
+	if err != nil {
+		c.Abort("400")
+		return
+	}
+
+	// Get the site
+	site := models.Site{ID: siteID}
+	o := orm.NewOrm()
+	err = o.Read(&site)
+	if err != nil {
+		c.Abort("404")
+		return
+	}
+
+	// Check if user has permission to edit the site
+	if !site.CanUserManageSite(user.ID, user.Role) {
+		c.Redirect("/dashboard", 302)
+		return
+	}
+
+	c.Data["Title"] = "Edit Site - " + site.Name
+	c.Data["Username"] = user.Username
+	c.Data["IsAuthenticated"] = true
+	c.Data["IsAdmin"] = user.IsAdmin()
+	c.Data["Site"] = site
+	c.Layout = "layout.tpl"
+	c.TplName = "site/edit.tpl"
 }
 
 // Helper to get user from JWT token

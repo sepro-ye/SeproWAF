@@ -4,6 +4,7 @@ import (
 	"SeproWAF/controllers"
 	"SeproWAF/database"
 	"SeproWAF/models"
+	"SeproWAF/proxy"
 	_ "SeproWAF/routers"
 	"time"
 
@@ -54,6 +55,13 @@ func main() {
 	if beego.BConfig.RunMode == "dev" {
 		beego.BConfig.WebConfig.DirectoryIndex = true
 		beego.BConfig.WebConfig.StaticDir["/swagger"] = "swagger"
+	}
+
+	// Initialize proxy server
+	err := proxy.InitializeProxyServer()
+	if err != nil {
+		logs.Error("Failed to initialize proxy server: %v", err)
+		// Continue anyway - the UI will still work
 	}
 
 	// Register error handler
