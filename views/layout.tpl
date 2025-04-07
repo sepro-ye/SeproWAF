@@ -38,6 +38,11 @@
                     <li class="nav-item auth-required d-none">
                         <a class="nav-link" href="/waf/rules">Rules</a>
                     </li>
+                    <li class="nav-item auth-required d-none">
+                        <a class="nav-link" href="/waf/certificates">
+                            <i class="bi bi-shield-lock"></i> Certificates
+                        </a>
+                    </li>
                     
                     <!-- Admin only items -->
                     <li class="nav-item admin-only d-none">

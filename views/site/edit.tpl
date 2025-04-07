@@ -42,6 +42,18 @@
                     </div>
                     {{end}}
                     
+                    <div class="mb-3">
+                        <label for="site-certificate" class="form-label">SSL Certificate (optional)</label>
+                        <select class="form-select" id="site-certificate">
+                            <option value="">None (HTTP only)</option>
+                            <!-- Certificates will be loaded dynamically with JavaScript -->
+                        </select>
+                        <div class="form-text">
+                            Select an SSL certificate to enable HTTPS for this site or 
+                            <a href="/waf/certificates/upload" target="_blank">upload a new certificate</a>
+                        </div>
+                    </div>
+                    
                     <div class="alert alert-danger d-none" id="edit-site-error"></div>
                     <div class="alert alert-success d-none" id="edit-site-success">Site updated successfully!</div>
                     
@@ -62,6 +74,45 @@ document.addEventListener('DOMContentLoaded', function() {
     const successElement = document.getElementById('edit-site-success');
     const siteId = {{.Site.ID}};
     
+    async function loadCertificates() {
+        try {
+            const response = await api.get('/certificates');
+            const certificates = response.data;
+            const selectElement = document.getElementById('site-certificate');
+            
+            if (certificates && certificates.length > 0) {
+                certificates.forEach(cert => {
+                    const option = document.createElement('option');
+                    option.value = cert.ID;
+                    option.textContent = `${cert.Name} (${cert.Domain}, expires ${new Date(cert.NotAfter).toLocaleDateString()})`;
+                    
+                    // Check if this is the currently selected certificate
+                    if ({{if .Site.CertificateID}}cert.ID === {{.Site.CertificateID}}{{else}}false{{end}}) {
+                        option.selected = true;
+                    }
+                    
+                    selectElement.appendChild(option);
+                });
+            } else {
+                const option = document.createElement('option');
+                option.value = "";
+                option.textContent = "No certificates available";
+                option.disabled = true;
+                selectElement.appendChild(option);
+            }
+        } catch (error) {
+            console.error('Error loading certificates:', error);
+            const selectElement = document.getElementById('site-certificate');
+            const option = document.createElement('option');
+            option.value = "";
+            option.textContent = "Failed to load certificates";
+            option.disabled = true;
+            selectElement.appendChild(option);
+        }
+    }
+
+    loadCertificates();
+    
     editSiteForm.addEventListener('submit', async function(e) {
         e.preventDefault();
         
@@ -75,6 +126,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (statusElement) {
             status = statusElement.value;
         }
+        
+        const certificateId = document.getElementById('site-certificate').value;
         
         // Basic validation
         if (!name || !domain || !targetURL) {
@@ -95,6 +148,13 @@ document.addEventListener('DOMContentLoaded', function() {
             // Add status if admin
             if (status) {
                 data.status = status;
+            }
+            
+            // Add certificate ID to the data object if selected
+            if (certificateId) {
+                data.certificate_id = parseInt(certificateId);
+            } else {
+                data.certificate_id = null;
             }
             
             await api.put(`/sites/${siteId}`, data);

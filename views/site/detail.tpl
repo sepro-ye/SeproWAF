@@ -49,6 +49,24 @@
                                     {{.Site.Status}}
                                 </span>
                             </dd>
+
+                            <dt class="col-sm-4">HTTPS:</dt>
+                            <dd class="col-sm-8">
+                                {{if .HasValidCertificate}}
+                                <div class="alert alert-success">
+                                    <i class="bi bi-lock-fill"></i> HTTPS is <strong>enabled</strong> for this site
+                                    <p class="mb-0 mt-2">
+                                        <strong>HTTP:</strong> <code>http://{{.Site.Domain}}:{{.ProxyPort}}</code><br>
+                                        <strong>HTTPS:</strong> <code>https://{{.Site.Domain}}:{{.ProxyHTTPSPort}}</code>
+                                    </p>
+                                </div>
+                                {{else}}
+                                <div class="alert alert-secondary">
+                                    <i class="bi bi-unlock"></i> HTTPS is <strong>disabled</strong> for this site
+                                    <p class="mb-0">To enable HTTPS, <a href="/waf/certificates/upload">upload an SSL certificate</a> and assign it to this site.</p>
+                                </div>
+                                {{end}}
+                            </dd>
                         </dl>
                     </div>
                     <div class="col-md-6">
@@ -93,7 +111,16 @@
                     <h6><i class="bi bi-info-circle"></i> For local testing</h6>
                     <p>If testing locally, add an entry to your hosts file:</p>
                     <pre><code>127.0.0.1  {{.Site.Domain}}</code></pre>
-                    <p class="mb-0">Then access the site at: <a href="http://{{.Site.Domain}}:{{.ProxyPort}}" target="_blank">http://{{.Site.Domain}}:{{.ProxyPort}}</a></p>
+                    <p class="mb-0">Then access the site at:
+                        <a href="http://{{.Site.Domain}}:{{.ProxyPort}}" target="_blank">http://{{.Site.Domain}}:{{.ProxyPort}}</a>
+                        
+                        {{if .HasValidCertificate}}
+                        or 
+                        <a href="https://{{.Site.Domain}}:{{.ProxyHTTPSPort}}" target="_blank">https://{{.Site.Domain}}:{{.ProxyHTTPSPort}}</a>
+                        {{else}}
+                        <br><small class="text-muted">(HTTPS is not available - no certificate configured)</small>
+                        {{end}}
+                    </p>
                 </div>
                 {{else}}
                 <div class="alert alert-warning">

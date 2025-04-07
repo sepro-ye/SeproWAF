@@ -25,7 +25,7 @@ type Site struct {
 	UserID            int        `orm:"column(user_id)"`                  // Owner of the site
 	RequestCount      int64      `orm:"default(0)"`                       // Total requests processed
 	BlockedCount      int64      `orm:"default(0)"`                       // Total requests blocked
-	CertificateID     *int       `orm:"column(certificate_id);null"`      // SSL certificate (if any)
+	CertificateID     *int       `orm:"column(certificate_id);null"`      // SSL certificate ID (if any)
 	CustomRulesIDs    string     `orm:"column(custom_rules_ids);null"`    // Comma-separated list of custom rule IDs
 	EnabledRulesetIDs string     `orm:"column(enabled_ruleset_ids);null"` // Comma-separated list of enabled ruleset IDs
 	Settings          string     `orm:"type(text);null"`                  // JSON-encoded settings
@@ -91,4 +91,19 @@ func (s *Site) IncrementBlockedCount() error {
 	s.BlockedCount++
 	_, err := o.Update(s, "BlockedCount")
 	return err
+}
+
+// GetCertificate returns the SSL certificate for this site, if any
+func (s *Site) GetCertificate() (*Certificate, error) {
+	if s.CertificateID == nil {
+		return nil, nil
+	}
+
+	return GetCertificateByID(*s.CertificateID)
+}
+
+// HasValidCertificate checks if the site has a valid certificate
+// This is a simple check without loading the certificate
+func (s *Site) HasValidCertificate() bool {
+	return s.CertificateID != nil
 }

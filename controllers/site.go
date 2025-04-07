@@ -20,10 +20,11 @@ type SiteController struct {
 
 // SiteRequest represents the request body for creating/updating sites
 type SiteRequest struct {
-	Name      string `json:"name"`
-	Domain    string `json:"domain"`
-	TargetURL string `json:"target_url"`
-	Status    string `json:"status,omitempty"`
+	Name          string `json:"name"`
+	Domain        string `json:"domain"`
+	TargetURL     string `json:"target_url"`
+	Status        string `json:"status,omitempty"`
+	CertificateID *int   `json:"certificate_id"`
 }
 
 // ListSites returns all sites owned by the current user
@@ -244,6 +245,33 @@ func (c *SiteController) UpdateSite() {
 	// Only admins can change status
 	if req.Status != "" && userRole == models.RoleAdmin {
 		site.Status = models.SiteStatus(req.Status)
+	}
+
+	// Update certificate if provided
+	if req.CertificateID != nil {
+		// Check if certificate exists and belongs to user
+		if *req.CertificateID > 0 {
+			cert, err := models.GetCertificateByID(*req.CertificateID)
+			if err != nil || cert == nil {
+				c.Ctx.Output.SetStatus(http.StatusBadRequest)
+				c.Data["json"] = map[string]string{"error": "Invalid certificate selected"}
+				c.ServeJSON()
+				return
+			}
+
+			// Check if user has permission to use this certificate
+			if cert.UserID != userID && userRole != models.RoleAdmin {
+				c.Ctx.Output.SetStatus(http.StatusForbidden)
+				c.Data["json"] = map[string]string{"error": "You don't have permission to use this certificate"}
+				c.ServeJSON()
+				return
+			}
+
+			site.CertificateID = req.CertificateID
+		} else {
+			// Remove certificate
+			site.CertificateID = nil
+		}
 	}
 
 	// Save changes

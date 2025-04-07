@@ -23,6 +23,10 @@ func init() {
 	web.Router("/waf/sites/:id", &controllers.UIController{}, "get:SiteDetail")
 	web.Router("/waf/sites/:id/edit", &controllers.UIController{}, "get:SiteEdit")
 
+	// UI Routes for Certificate Management
+	web.Router("/waf/certificates", &controllers.UIController{}, "get:CertificateList")
+	web.Router("/waf/certificates/upload", &controllers.UIController{}, "get:CertificateUpload")
+
 	// API Routes
 	// Public API routes
 	web.Router("/api/auth/register", &controllers.AuthController{}, "post:Register")
@@ -41,6 +45,10 @@ func init() {
 	web.Router("/api/sites/:id", &controllers.SiteController{}, "get:GetSite;put:UpdateSite;delete:DeleteSite")
 	web.Router("/api/sites/:id/toggle-status", &controllers.SiteController{}, "post:ToggleSiteStatus")
 	web.Router("/api/sites/:id/stats", &controllers.SiteController{}, "get:GetSiteStats")
+
+	// API Routes for Certificate Management
+	web.Router("/api/certificates", &controllers.CertificateController{}, "get:ListCertificates;post:UploadCertificate")
+	web.Router("/api/certificates/:id", &controllers.CertificateController{}, "get:GetCertificate;delete:DeleteCertificate")
 
 	// Admin-only API routes
 	web.Router("/api/users", &controllers.UserController{}, "get:GetUsers")

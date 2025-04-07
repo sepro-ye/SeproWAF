@@ -24,14 +24,19 @@ func InitializeProxyServer() error {
 		return nil
 	}
 
-	// Get proxy port from config
-	proxyPort, err := web.AppConfig.Int("ProxyPort")
+	// Get proxy ports from config
+	httpPort, err := web.AppConfig.Int("ProxyPort")
 	if err != nil {
-		proxyPort = 8080 // Default port if not specified
+		httpPort = 8080 // Default HTTP port if not specified
+	}
+
+	httpsPort, err := web.AppConfig.Int("ProxyHTTPSPort")
+	if err != nil {
+		httpsPort = 8443 // Default HTTPS port if not specified
 	}
 
 	// Create and start the proxy server
-	proxyServer = NewProxyServer(proxyPort)
+	proxyServer = NewProxyServer(httpPort, httpsPort)
 
 	// Start the server in a goroutine
 	go func() {
@@ -40,7 +45,7 @@ func InitializeProxyServer() error {
 		}
 	}()
 
-	logs.Info("Reverse proxy server initialized on port %d", proxyPort)
+	logs.Info("Reverse proxy server initialized (HTTP: %d, HTTPS: %d)", httpPort, httpsPort)
 	return nil
 }
 

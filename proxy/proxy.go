@@ -3,6 +3,8 @@ package proxy
 import (
 	"SeproWAF/models"
 	"context"
+	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -17,33 +19,129 @@ import (
 
 // ProxyServer represents the reverse proxy server
 type ProxyServer struct {
-	server      *http.Server
+	httpServer  *http.Server
+	httpsServer *http.Server
 	domainMap   map[string]*SiteProxy
 	mapMutex    sync.RWMutex
-	port        int
+	httpPort    int
+	httpsPort   int
+	certManager *CertificateManager
 	defaultHost string
+	tlsConfig   *tls.Config
 }
 
 // SiteProxy represents a site's proxy configuration
 type SiteProxy struct {
 	Site             *models.Site
 	ReverseProxy     *httputil.ReverseProxy
+	Certificate      *models.Certificate
 	LastAccessedTime time.Time
+	UseHTTPS         bool
+}
+
+// CertificateManager manages TLS certificates
+type CertificateManager struct {
+	certificates map[string]*tls.Certificate
+	mutex        sync.RWMutex
+}
+
+// NewCertificateManager creates a new certificate manager
+func NewCertificateManager() *CertificateManager {
+	return &CertificateManager{
+		certificates: make(map[string]*tls.Certificate),
+	}
+}
+
+// GetCertificate is a callback function for tls.Config
+func (cm *CertificateManager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	host := hello.ServerName
+
+	// If ServerName is empty, use a default certificate if available
+	if host == "" {
+		cm.mutex.RLock()
+		cert, ok := cm.certificates["_default"]
+		cm.mutex.RUnlock()
+		if ok {
+			return cert, nil
+		}
+		// Continue to check if we have any certificate that could be used
+		// by getting the first one in the map
+		cm.mutex.RLock()
+		for _, cert := range cm.certificates {
+			cm.mutex.RUnlock()
+			return cert, nil
+		}
+		cm.mutex.RUnlock()
+	}
+
+	cm.mutex.RLock()
+	cert, ok := cm.certificates[host]
+	cm.mutex.RUnlock()
+
+	if ok {
+		return cert, nil
+	}
+
+	// No certificate found for this domain
+	logs.Warning("No certificate found for domain: %s", host)
+	return nil, fmt.Errorf("no certificate for domain: %s", host)
+}
+
+// AddCertificate adds a certificate to the manager
+func (cm *CertificateManager) AddCertificate(domain string, cert *tls.Certificate) {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	cm.certificates[domain] = cert
+	logs.Info("Added certificate for domain: %s", domain)
+}
+
+// RemoveCertificate removes a certificate from the manager
+func (cm *CertificateManager) RemoveCertificate(domain string) {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	delete(cm.certificates, domain)
+	logs.Info("Removed certificate for domain: %s", domain)
 }
 
 // NewProxyServer creates a new proxy server
-func NewProxyServer(port int) *ProxyServer {
+func NewProxyServer(httpPort, httpsPort int) *ProxyServer {
+	certManager := NewCertificateManager()
+
+	tlsConfig := &tls.Config{
+		GetCertificate: certManager.GetCertificate,
+		MinVersion:     tls.VersionTLS12,
+		CipherSuites: []uint16{
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+		},
+		PreferServerCipherSuites: true,
+	}
+
 	server := &ProxyServer{
 		domainMap:   make(map[string]*SiteProxy),
 		mapMutex:    sync.RWMutex{},
-		port:        port,
+		httpPort:    httpPort,
+		httpsPort:   httpsPort,
+		certManager: certManager,
 		defaultHost: "localhost",
+		tlsConfig:   tlsConfig,
 	}
 
 	// Create HTTP server
-	server.server = &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
+	server.httpServer = &http.Server{
+		Addr:    fmt.Sprintf(":%d", httpPort),
 		Handler: server,
+	}
+
+	// Create HTTPS server
+	server.httpsServer = &http.Server{
+		Addr:      fmt.Sprintf(":%d", httpsPort),
+		Handler:   server,
+		TLSConfig: tlsConfig,
 	}
 
 	return server
@@ -60,9 +158,36 @@ func (ps *ProxyServer) Start() error {
 	// Start monitoring for site changes
 	go ps.MonitorSiteChanges()
 
-	// Start the server
-	logs.Info("Starting reverse proxy server on port %d", ps.port)
-	return ps.server.ListenAndServe()
+	// Start monitoring for certificate changes
+	go ps.MonitorCertificates()
+
+	// Start HTTP server in a goroutine
+	go func() {
+		logs.Info("Starting HTTP proxy server on port %d", ps.httpPort)
+		if err := ps.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logs.Error("HTTP server error: %v", err)
+		}
+	}()
+
+	// Only start HTTPS server if we have certificates
+	ps.certManager.mutex.RLock()
+	hasCertificates := len(ps.certManager.certificates) > 0
+	ps.certManager.mutex.RUnlock()
+
+	if hasCertificates {
+		// Start HTTPS server in a goroutine - make it non-fatal if it fails
+		go func() {
+			logs.Info("Starting HTTPS proxy server on port %d", ps.httpsPort)
+			if err := ps.httpsServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+				logs.Error("HTTPS server error: %v", err)
+				logs.Warning("HTTPS server failed to start. SSL functionality will be unavailable.")
+			}
+		}()
+	} else {
+		logs.Info("No certificates available - HTTPS server not started")
+	}
+
+	return nil
 }
 
 // Stop stops the proxy server
@@ -70,8 +195,18 @@ func (ps *ProxyServer) Stop() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	logs.Info("Stopping reverse proxy server")
-	return ps.server.Shutdown(ctx)
+	logs.Info("Stopping HTTP proxy server")
+	if err := ps.httpServer.Shutdown(ctx); err != nil {
+		logs.Error("HTTP server shutdown error: %v", err)
+	}
+
+	logs.Info("Stopping HTTPS proxy server")
+	if err := ps.httpsServer.Shutdown(ctx); err != nil {
+		logs.Error("HTTPS server shutdown error: %v", err)
+		return err
+	}
+
+	return nil
 }
 
 // LoadActiveSites loads all active sites from the database
@@ -110,18 +245,50 @@ func (ps *ProxyServer) MonitorSiteChanges() {
 	}
 }
 
+// MonitorCertificates checks for certificate changes and starts HTTPS when needed
+func (ps *ProxyServer) MonitorCertificates() {
+	httpsStarted := false
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if !httpsStarted {
+				// Check if we have certificates now
+				ps.certManager.mutex.RLock()
+				hasCertificates := len(ps.certManager.certificates) > 0
+				ps.certManager.mutex.RUnlock()
+
+				if hasCertificates {
+					// Start HTTPS server
+					go func() {
+						logs.Info("Certificates available - starting HTTPS proxy server on port %d", ps.httpsPort)
+						if err := ps.httpsServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+							logs.Error("HTTPS server error: %v", err)
+							logs.Warning("HTTPS server failed to start. SSL functionality will be unavailable.")
+						}
+					}()
+					httpsStarted = true
+				}
+			}
+		}
+	}
+}
+
 // ServeHTTP handles HTTP requests
 func (ps *ProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	host := r.Host
 
 	// Strip port from host if present
-	if hostWithoutPort, _, err := net.SplitHostPort(host); err == nil {
-		host = hostWithoutPort
+	hostWithoutPort := host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		hostWithoutPort = h
 	}
 
 	// Find the site proxy for this host
 	ps.mapMutex.RLock()
-	siteProxy, exists := ps.domainMap[host]
+	siteProxy, exists := ps.domainMap[hostWithoutPort]
 	ps.mapMutex.RUnlock()
 
 	// If site not found, return 404
@@ -133,6 +300,23 @@ func (ps *ProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Update last access time
 	siteProxy.LastAccessedTime = time.Now()
+
+	// Check if we should redirect HTTP to HTTPS
+	if r.TLS == nil && siteProxy.UseHTTPS {
+		// Create the HTTPS URL with the correct port
+		target := fmt.Sprintf("https://%s:%d", hostWithoutPort, ps.httpsPort)
+
+		if r.URL.Path != "" {
+			target += r.URL.Path
+		}
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+
+		logs.Info("Redirecting HTTP request to HTTPS: %s -> %s", r.URL.String(), target)
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+		return
+	}
 
 	// Update request count
 	go func(siteID int) {
@@ -172,8 +356,15 @@ func (ps *ProxyServer) AddOrUpdateSite(site *models.Site) error {
 
 	// Configure custom error handling for the proxy
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		logs.Error("Proxy error for %s: %v", site.Domain, err)
-		http.Error(w, "Backend server error", http.StatusBadGateway)
+		// Don't log context canceled errors as they're usually just client disconnections
+		if !errors.Is(err, context.Canceled) {
+			logs.Error("Proxy error for %s: %v", site.Domain, err)
+		}
+
+		// Only send error response if headers weren't written yet
+		if w.Header().Get("Content-Type") == "" {
+			http.Error(w, "Backend server error", http.StatusBadGateway)
+		}
 	}
 
 	// Modify the director to update the Host header
@@ -185,11 +376,37 @@ func (ps *ProxyServer) AddOrUpdateSite(site *models.Site) error {
 		req.Host = targetURL.Host
 	}
 
+	// Check if site has a certificate - make this optional
+	useHTTPS := false
+	var certificate *models.Certificate = nil
+
+	if site.CertificateID != nil {
+		// Attempt to load the certificate, but don't fail if it's not found
+		cert, err := models.GetCertificateByID(*site.CertificateID)
+		if err == nil && cert != nil {
+			// Try to load the certificate into memory
+			tlsCert, err := tls.X509KeyPair([]byte(cert.Certificate), []byte(cert.PrivateKey))
+			if err == nil {
+				// Add the certificate to the manager
+				ps.certManager.AddCertificate(site.Domain, &tlsCert)
+				useHTTPS = true
+				certificate = cert
+				logs.Info("Using SSL certificate for domain: %s", site.Domain)
+			} else {
+				logs.Warning("Failed to parse certificate for %s: %v - HTTPS will be disabled", site.Domain, err)
+			}
+		} else {
+			logs.Warning("Certificate not found for site %s - HTTPS will be disabled", site.Domain)
+		}
+	}
+
 	// Create or update site proxy
 	siteProxy := &SiteProxy{
 		Site:             site,
 		ReverseProxy:     proxy,
+		Certificate:      certificate,
 		LastAccessedTime: time.Now(),
+		UseHTTPS:         useHTTPS,
 	}
 
 	// Add to domain map
@@ -197,7 +414,7 @@ func (ps *ProxyServer) AddOrUpdateSite(site *models.Site) error {
 	ps.domainMap[site.Domain] = siteProxy
 	ps.mapMutex.Unlock()
 
-	logs.Info("Added/updated site in proxy: %s -> %s", site.Domain, site.TargetURL)
+	logs.Info("Added/updated site in proxy: %s -> %s (HTTPS: %t)", site.Domain, site.TargetURL, useHTTPS)
 	return nil
 }
 
@@ -206,7 +423,12 @@ func (ps *ProxyServer) RemoveSite(domain string) {
 	ps.mapMutex.Lock()
 	defer ps.mapMutex.Unlock()
 
-	if _, exists := ps.domainMap[domain]; exists {
+	if siteProxy, exists := ps.domainMap[domain]; exists {
+		// Remove certificate from manager if it exists
+		if siteProxy.UseHTTPS {
+			ps.certManager.RemoveCertificate(domain)
+		}
+
 		delete(ps.domainMap, domain)
 		logs.Info("Removed site from proxy: %s", domain)
 	}

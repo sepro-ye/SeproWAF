@@ -131,9 +131,9 @@ func (c *UIController) SiteDetail() {
 	}
 
 	// Get the site
-	site := models.Site{ID: siteID}
 	o := orm.NewOrm()
-	err = o.Read(&site)
+	site := &models.Site{ID: siteID}
+	err = o.Read(site)
 	if err != nil {
 		c.Abort("404")
 		return
@@ -145,18 +145,28 @@ func (c *UIController) SiteDetail() {
 		return
 	}
 
-	// Get proxy port from configuration
+	// Get proxy ports from configuration
 	proxyPort, err := web.AppConfig.Int("ProxyPort")
 	if err != nil {
 		proxyPort = 8080 // Default fallback value
 	}
+
+	httpsPort, err := web.AppConfig.Int("ProxyHTTPSPort")
+	if err != nil {
+		httpsPort = 8443 // Default fallback value
+	}
+
+	// Determine if SSL is enabled (don't try to load the certificate)
+	hasValidCertificate := site.CertificateID != nil
 
 	c.Data["Title"] = site.Name + " - Site Details"
 	c.Data["Username"] = user.Username
 	c.Data["IsAuthenticated"] = true
 	c.Data["IsAdmin"] = user.IsAdmin()
 	c.Data["Site"] = site
-	c.Data["ProxyPort"] = proxyPort // Pass the proxy port to the template
+	c.Data["HasValidCertificate"] = hasValidCertificate
+	c.Data["ProxyPort"] = proxyPort
+	c.Data["ProxyHTTPSPort"] = httpsPort
 	c.Layout = "layout.tpl"
 	c.TplName = "site/detail.tpl"
 }
@@ -216,6 +226,40 @@ func (c *UIController) SiteEdit() {
 	c.Data["Site"] = site
 	c.Layout = "layout.tpl"
 	c.TplName = "site/edit.tpl"
+}
+
+// CertificateList renders the certificate list page
+func (c *UIController) CertificateList() {
+	// Get authenticated user
+	user := c.GetUserFromJWT()
+	if user == nil {
+		c.Redirect("/auth/login", 302)
+		return
+	}
+
+	c.Data["Title"] = "SSL Certificates"
+	c.Data["Username"] = user.Username
+	c.Data["IsAuthenticated"] = true
+	c.Data["IsAdmin"] = user.IsAdmin()
+	c.Layout = "layout.tpl"
+	c.TplName = "certificate/list.tpl"
+}
+
+// CertificateUpload renders the certificate upload page
+func (c *UIController) CertificateUpload() {
+	// Get authenticated user
+	user := c.GetUserFromJWT()
+	if user == nil {
+		c.Redirect("/auth/login", 302)
+		return
+	}
+
+	c.Data["Title"] = "Upload Certificate"
+	c.Data["Username"] = user.Username
+	c.Data["IsAuthenticated"] = true
+	c.Data["IsAdmin"] = user.IsAdmin()
+	c.Layout = "layout.tpl"
+	c.TplName = "certificate/upload.tpl"
 }
 
 // Helper to get user from JWT token
