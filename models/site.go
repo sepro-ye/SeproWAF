@@ -25,6 +25,7 @@ type Site struct {
 	UserID            int        `orm:"column(user_id)"`                  // Owner of the site
 	RequestCount      int64      `orm:"default(0)"`                       // Total requests processed
 	BlockedCount      int64      `orm:"default(0)"`                       // Total requests blocked
+	WAFEnabled        bool       `orm:"default(true)"`                    // Whether WAF protection is enabled
 	CertificateID     *int       `orm:"column(certificate_id);null"`      // SSL certificate ID (if any)
 	CustomRulesIDs    string     `orm:"column(custom_rules_ids);null"`    // Comma-separated list of custom rule IDs
 	EnabledRulesetIDs string     `orm:"column(enabled_ruleset_ids);null"` // Comma-separated list of enabled ruleset IDs

@@ -1,0 +1,9 @@
+services:
+  juiceshop_prod:
+    image: bkimminich/juice-shop
+    ports:
+      - "5000:3000"
+  juiceshop_testing:
+    image: bkimminich/juice-shop
+    ports:
+      - "7000:3000"

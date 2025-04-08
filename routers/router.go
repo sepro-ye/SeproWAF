@@ -44,6 +44,7 @@ func init() {
 	web.Router("/api/sites", &controllers.SiteController{}, "get:ListSites;post:CreateSite")
 	web.Router("/api/sites/:id", &controllers.SiteController{}, "get:GetSite;put:UpdateSite;delete:DeleteSite")
 	web.Router("/api/sites/:id/toggle-status", &controllers.SiteController{}, "post:ToggleSiteStatus")
+	web.Router("/api/sites/:id/toggle-waf", &controllers.SiteController{}, "post:ToggleWAF")
 	web.Router("/api/sites/:id/stats", &controllers.SiteController{}, "get:GetSiteStats")
 
 	// API Routes for Certificate Management

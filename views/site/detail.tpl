@@ -50,6 +50,26 @@
                                 </span>
                             </dd>
 
+                            <dt class="col-sm-4">WAF Protection:</dt>
+                            <dd class="col-sm-8">
+                                <div class="d-flex align-items-center">
+                                    <div class="form-check form-switch me-2">
+                                        <input class="form-check-input" type="checkbox" id="waf-toggle" {{if .Site.WAFEnabled}}checked{{end}}
+                                           {{if ne .Site.Status "active"}}disabled{{end}}>
+                                    </div>
+                                    <span id="waf-status" class="badge {{if .Site.WAFEnabled}}bg-success{{else}}bg-secondary{{end}}">
+                                        {{if .Site.WAFEnabled}}Enabled{{else}}Disabled{{end}}
+                                    </span>
+                                </div>
+                                <small class="text-muted" id="waf-help-text">
+                                    {{if ne .Site.Status "active"}}
+                                    WAF toggle is disabled because site is not active
+                                    {{else}}
+                                    Toggle the Web Application Firewall protection for this site
+                                    {{end}}
+                                </small>
+                            </dd>
+
                             <dt class="col-sm-4">HTTPS:</dt>
                             <dd class="col-sm-8">
                                 {{if .HasValidCertificate}}
@@ -236,6 +256,36 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     document.getElementById('block-rate').textContent = blockRate + '%';
+    
+    // Toggle WAF protection
+    document.getElementById('waf-toggle').addEventListener('change', async function() {
+        const wafStatus = document.getElementById('waf-status');
+        const wafHelpText = document.getElementById('waf-help-text');
+        const isEnabled = this.checked;
+        
+        try {
+            // Call the toggle WAF API endpoint
+            const response = await api.post(`/sites/${siteId}/toggle-waf`);
+            
+            // Update UI to reflect new state
+            if (response.data.wafEnabled) {
+                wafStatus.textContent = 'Enabled';
+                wafStatus.className = 'badge bg-success';
+                wafHelpText.textContent = 'Web Application Firewall protection is enabled for this site';
+                showToast('WAF protection enabled successfully', 'success');
+            } else {
+                wafStatus.textContent = 'Disabled';
+                wafStatus.className = 'badge bg-secondary';
+                wafHelpText.textContent = 'Web Application Firewall protection is disabled for this site';
+                showToast('WAF protection disabled successfully', 'warning');
+            }
+        } catch (error) {
+            console.error('Error toggling WAF protection:', error);
+            // Revert toggle to previous state if there was an error
+            this.checked = !isEnabled;
+            showToast('Failed to change WAF protection state', 'danger');
+        }
+    });
     
     // Toggle site status
     document.getElementById('toggle-status-btn').addEventListener('click', async function() {

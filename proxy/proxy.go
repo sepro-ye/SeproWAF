@@ -28,6 +28,7 @@ type ProxyServer struct {
 	certManager *CertificateManager
 	defaultHost string
 	tlsConfig   *tls.Config
+	wafManager  *WAFManager // Added WAF manager
 }
 
 // SiteProxy represents a site's proxy configuration
@@ -37,6 +38,7 @@ type SiteProxy struct {
 	Certificate      *models.Certificate
 	LastAccessedTime time.Time
 	UseHTTPS         bool
+	WAFEnabled       bool // Added WAF enabled flag
 }
 
 // CertificateManager manages TLS certificates
@@ -121,6 +123,16 @@ func NewProxyServer(httpPort, httpsPort int) *ProxyServer {
 		PreferServerCipherSuites: true,
 	}
 
+	// Initialize WAF manager
+	wafManager, err := NewWAFManager()
+	if err != nil {
+		logs.Error("Failed to initialize WAF manager: %v", err)
+		logs.Warning("WAF functionality will be disabled")
+		// Continue without WAF
+	} else {
+		logs.Info("Coraza WAF manager initialized successfully")
+	}
+
 	server := &ProxyServer{
 		domainMap:   make(map[string]*SiteProxy),
 		mapMutex:    sync.RWMutex{},
@@ -129,6 +141,7 @@ func NewProxyServer(httpPort, httpsPort int) *ProxyServer {
 		certManager: certManager,
 		defaultHost: "localhost",
 		tlsConfig:   tlsConfig,
+		wafManager:  wafManager,
 	}
 
 	// Create HTTP server
@@ -332,7 +345,14 @@ func (ps *ProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}(siteProxy.Site.ID)
 
-	// Forward the request to the backend server
+	// Apply WAF if enabled for this site and WAF manager is available
+	if siteProxy.WAFEnabled && ps.wafManager != nil {
+		wafHandler := ps.wafManager.WAFHandler(siteProxy.ReverseProxy, siteProxy.Site.ID, siteProxy.Site.Domain)
+		wafHandler.ServeHTTP(w, r)
+		return
+	}
+
+	// Forward the request to the backend server if WAF is not enabled
 	siteProxy.ReverseProxy.ServeHTTP(w, r)
 }
 
@@ -407,6 +427,7 @@ func (ps *ProxyServer) AddOrUpdateSite(site *models.Site) error {
 		Certificate:      certificate,
 		LastAccessedTime: time.Now(),
 		UseHTTPS:         useHTTPS,
+		WAFEnabled:       site.WAFEnabled, // Set WAF enabled flag
 	}
 
 	// Add to domain map

@@ -1,0 +1,20 @@
+appname = SeproWAF
+httpport = 8000
+runmode = dev
+
+JWTSecret = "your-secret-key-here"
+
+# Database configuration
+MYSQL_USER=root
+MYSQL_PASSWORD=
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_DATABASE=sepro_waf
+
+# Proxy configuration
+ProxyPort = 8080
+ProxyHTTPSPort = 8443
+
+# WAF configuration
+WAFRulesDir = rules/
+WAFLogDir = logs/waf

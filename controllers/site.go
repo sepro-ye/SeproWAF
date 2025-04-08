@@ -4,6 +4,7 @@ import (
 	"SeproWAF/models"
 	"SeproWAF/proxy"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -473,5 +474,71 @@ func (c *SiteController) GetSiteStats() {
 
 	c.Ctx.Output.SetStatus(http.StatusOK)
 	c.Data["json"] = stats
+	c.ServeJSON()
+}
+
+// ToggleWAF enables or disables WAF protection for a site
+func (c *SiteController) ToggleWAF() {
+	// Get user ID and role from context (set by middleware)
+	userID := c.Ctx.Input.GetData("userID").(int)
+	userRole := c.Ctx.Input.GetData("userRole").(models.Role)
+
+	// Get site ID from URL parameter
+	siteID, err := strconv.Atoi(c.Ctx.Input.Param(":id"))
+	if err != nil {
+		c.Ctx.Output.SetStatus(http.StatusBadRequest)
+		c.Data["json"] = map[string]string{"error": "Invalid site ID"}
+		c.ServeJSON()
+		return
+	}
+
+	// Get the site
+	site, err := models.GetSiteByID(siteID)
+	if err != nil {
+		c.Ctx.Output.SetStatus(http.StatusNotFound)
+		c.Data["json"] = map[string]string{"error": "Site not found"}
+		c.ServeJSON()
+		return
+	}
+
+	// Check if user has permission to modify the site
+	if !site.CanUserManageSite(userID, userRole) {
+		c.Ctx.Output.SetStatus(http.StatusForbidden)
+		c.Data["json"] = map[string]string{"error": "Access denied"}
+		c.ServeJSON()
+		return
+	}
+
+	// Toggle the WAF state
+	site.WAFEnabled = !site.WAFEnabled
+	state := "enabled"
+	if !site.WAFEnabled {
+		state = "disabled"
+	}
+
+	// Save changes
+	o := orm.NewOrm()
+	_, err = o.Update(site, "WAFEnabled")
+	if err != nil {
+		c.Ctx.Output.SetStatus(http.StatusInternalServerError)
+		c.Data["json"] = map[string]string{"error": "Failed to update WAF state: " + err.Error()}
+		c.ServeJSON()
+		return
+	}
+
+	// Refresh site in the proxy if it's active
+	if site.Status == models.SiteStatusActive {
+		err = proxy.RefreshSite(site)
+		if err != nil {
+			logs.Error("Failed to refresh site in proxy after WAF toggle: %v", err)
+			// Still return success to the client, but log the error
+		}
+	}
+
+	c.Ctx.Output.SetStatus(http.StatusOK)
+	c.Data["json"] = map[string]interface{}{
+		"message":    fmt.Sprintf("WAF protection %s successfully", state),
+		"wafEnabled": site.WAFEnabled,
+	}
 	c.ServeJSON()
 }
