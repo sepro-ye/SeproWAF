@@ -1,124 +1,124 @@
-<div class="row mb-4">
-    <div class="col">
-        <h1>Dashboard</h1>
-        <p class="lead">Welcome back, {{.Username}}!</p>
+<div class="flex flex-wrap mb-4">
+    <div class="w-full">
+        <h1 class="text-2xl font-bold">Dashboard</h1>
+        <p class="text-xl font-light">Welcome back, {{.Username}}!</p>
     </div>
 </div>
 
-<div class="row mb-4">
-    <div class="col-md-3">
-        <div class="card stats-card">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <div class="stats-icon bg-primary text-white">
+<div class="flex flex-wrap mb-4">
+    <div class="w-full md:w-1/4 px-2">
+        <div class="bg-white rounded-lg shadow-md">
+            <div class="p-4">
+                <div class="flex justify-between items-center mb-3">
+                    <div class="bg-blue-500 text-white p-3 rounded-lg">
                         <i class="bi bi-globe"></i>
                     </div>
-                    <h3 class="mb-0" id="sites-count">--</h3>
+                    <h3 class="text-xl font-bold" id="sites-count">--</h3>
                 </div>
-                <h6 class="text-muted">Protected Sites</h6>
+                <h6 class="text-gray-500">Protected Sites</h6>
             </div>
-            <div class="card-footer bg-transparent border-0">
-                <a href="/waf/sites" class="text-decoration-none">View all <i class="bi bi-arrow-right"></i></a>
+            <div class="px-4 py-2 border-t border-gray-100">
+                <a href="/waf/sites" class="no-underline text-blue-500 hover:text-blue-700">View all <i class="bi bi-arrow-right"></i></a>
             </div>
         </div>
     </div>
     
-    <div class="col-md-3">
-        <div class="card stats-card">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <div class="stats-icon bg-danger text-white">
+    <div class="w-full md:w-1/4 px-2">
+        <div class="bg-white rounded-lg shadow-md">
+            <div class="p-4">
+                <div class="flex justify-between items-center mb-3">
+                    <div class="bg-red-500 text-white p-3 rounded-lg">
                         <i class="bi bi-shield-x"></i>
                     </div>
-                    <h3 class="mb-0" id="attacks-count">--</h3>
+                    <h3 class="text-xl font-bold" id="attacks-count">--</h3>
                 </div>
-                <h6 class="text-muted">Attacks Blocked (24h)</h6>
+                <h6 class="text-gray-500">Attacks Blocked (24h)</h6>
             </div>
-            <div class="card-footer bg-transparent border-0">
-                <a href="/waf/logs" class="text-decoration-none">View logs <i class="bi bi-arrow-right"></i></a>
+            <div class="px-4 py-2 border-t border-gray-100">
+                <a href="/waf/logs" class="no-underline text-blue-500 hover:text-blue-700">View logs <i class="bi bi-arrow-right"></i></a>
             </div>
         </div>
     </div>
     
-    <div class="col-md-3">
-        <div class="card stats-card">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <div class="stats-icon bg-success text-white">
+    <div class="w-full md:w-1/4 px-2">
+        <div class="bg-white rounded-lg shadow-md">
+            <div class="p-4">
+                <div class="flex justify-between items-center mb-3">
+                    <div class="bg-green-500 text-white p-3 rounded-lg">
                         <i class="bi bi-check-circle"></i>
                     </div>
-                    <h3 class="mb-0" id="requests-count">--</h3>
+                    <h3 class="text-xl font-bold" id="requests-count">--</h3>
                 </div>
-                <h6 class="text-muted">Requests (24h)</h6>
+                <h6 class="text-gray-500">Requests (24h)</h6>
             </div>
-            <div class="card-footer bg-transparent border-0">
-                <a href="/waf/logs" class="text-decoration-none">View all <i class="bi bi-arrow-right"></i></a>
+            <div class="px-4 py-2 border-t border-gray-100">
+                <a href="/waf/logs" class="no-underline text-blue-500 hover:text-blue-700">View all <i class="bi bi-arrow-right"></i></a>
             </div>
         </div>
     </div>
     
-    <div class="col-md-3">
-        <div class="card stats-card">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <div class="stats-icon bg-warning text-white">
+    <div class="w-full md:w-1/4 px-2">
+        <div class="bg-white rounded-lg shadow-md">
+            <div class="p-4">
+                <div class="flex justify-between items-center mb-3">
+                    <div class="bg-yellow-500 text-white p-3 rounded-lg">
                         <i class="bi bi-shield-check"></i>
                     </div>
-                    <h3 class="mb-0" id="rules-count">--</h3>
+                    <h3 class="text-xl font-bold" id="rules-count">--</h3>
                 </div>
-                <h6 class="text-muted">Active Rules</h6>
+                <h6 class="text-gray-500">Active Rules</h6>
             </div>
-            <div class="card-footer bg-transparent border-0">
-                <a href="/waf/rules" class="text-decoration-none">Manage rules <i class="bi bi-arrow-right"></i></a>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="row mb-4">
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">Traffic Overview</h5>
-            </div>
-            <div class="card-body">
-                <canvas id="trafficChart" height="300"></canvas>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">Attack Types</h5>
-            </div>
-            <div class="card-body">
-                <canvas id="attackTypesChart" height="300"></canvas>
+            <div class="px-4 py-2 border-t border-gray-100">
+                <a href="/waf/rules" class="no-underline text-blue-500 hover:text-blue-700">Manage rules <i class="bi bi-arrow-right"></i></a>
             </div>
         </div>
     </div>
 </div>
 
-<div class="row">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="card-title mb-0">Recent Attacks</h5>
-                <a href="/waf/logs" class="btn btn-sm btn-outline-primary">View All</a>
+<div class="flex flex-wrap mb-4">
+    <div class="w-full md:w-2/3 px-2">
+        <div class="bg-white rounded-lg shadow-md">
+            <div class="px-4 py-3 border-b border-gray-200">
+                <h5 class="font-semibold text-lg mb-0">Traffic Overview</h5>
             </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
+            <div class="p-4">
+                <canvas id="trafficChart" class="h-[300px]"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="w-full md:w-1/3 px-2">
+        <div class="bg-white rounded-lg shadow-md">
+            <div class="px-4 py-3 border-b border-gray-200">
+                <h5 class="font-semibold text-lg mb-0">Attack Types</h5>
+            </div>
+            <div class="p-4">
+                <canvas id="attackTypesChart" class="h-[300px]"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="flex flex-wrap">
+    <div class="w-full md:w-1/2 px-2">
+        <div class="bg-white rounded-lg shadow-md">
+            <div class="px-4 py-3 border-b border-gray-200 flex justify-between items-center">
+                <h5 class="font-semibold text-lg mb-0">Recent Attacks</h5>
+                <a href="/waf/logs" class="px-3 py-1 text-sm rounded border border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-white">View All</a>
+            </div>
+            <div class="p-0">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full table-auto [&>tbody>tr:hover]:bg-gray-100">
                         <thead>
-                            <tr>
-                                <th>Time</th>
-                                <th>IP Address</th>
-                                <th>Attack Type</th>
-                                <th>Site</th>
+                            <tr class="bg-gray-50 border-b border-gray-200">
+                                <th class="px-4 py-2 text-left">Time</th>
+                                <th class="px-4 py-2 text-left">IP Address</th>
+                                <th class="px-4 py-2 text-left">Attack Type</th>
+                                <th class="px-4 py-2 text-left">Site</th>
                             </tr>
                         </thead>
                         <tbody id="recent-attacks">
                             <tr>
-                                <td colspan="4" class="text-center">Loading...</td>
+                                <td colspan="4" class="text-center py-4">Loading...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -126,26 +126,26 @@
             </div>
         </div>
     </div>
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="card-title mb-0">Protected Sites</h5>
-                <a href="/waf/sites" class="btn btn-sm btn-outline-primary">Manage Sites</a>
+    <div class="w-full md:w-1/2 px-2">
+        <div class="bg-white rounded-lg shadow-md">
+            <div class="px-4 py-3 border-b border-gray-200 flex justify-between items-center">
+                <h5 class="font-semibold text-lg mb-0">Protected Sites</h5>
+                <a href="/waf/sites" class="px-3 py-1 text-sm rounded border border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-white">Manage Sites</a>
             </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
+            <div class="p-0">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full table-auto [&>tbody>tr:hover]:bg-gray-100">
                         <thead>
-                            <tr>
-                                <th>Domain</th>
-                                <th>Status</th>
-                                <th>Traffic (24h)</th>
-                                <th>Attacks (24h)</th>
+                            <tr class="bg-gray-50 border-b border-gray-200">
+                                <th class="px-4 py-2 text-left">Domain</th>
+                                <th class="px-4 py-2 text-left">Status</th>
+                                <th class="px-4 py-2 text-left">Traffic (24h)</th>
+                                <th class="px-4 py-2 text-left">Attacks (24h)</th>
                             </tr>
                         </thead>
                         <tbody id="protected-sites">
                             <tr>
-                                <td colspan="4" class="text-center">Loading...</td>
+                                <td colspan="4" class="text-center py-4">Loading...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -295,10 +295,10 @@ document.addEventListener('DOMContentLoaded', function() {
         attacksData.forEach(attack => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td>${attack.time}</td>
-                <td>${attack.ip}</td>
-                <td><span class="badge bg-danger">${attack.type}</span></td>
-                <td>${attack.site}</td>
+                <td class="px-4 py-2 border-b border-gray-200">${attack.time}</td>
+                <td class="px-4 py-2 border-b border-gray-200">${attack.ip}</td>
+                <td class="px-4 py-2 border-b border-gray-200"><span class="inline-block px-2 py-1 text-xs font-semibold rounded-full bg-red-500 text-white">${attack.type}</span></td>
+                <td class="px-4 py-2 border-b border-gray-200">${attack.site}</td>
             `;
             tbody.appendChild(tr);
         });
@@ -318,10 +318,10 @@ document.addEventListener('DOMContentLoaded', function() {
         sitesData.forEach(site => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td>${site.domain}</td>
-                <td><span class="badge bg-success">${site.status}</span></td>
-                <td>${site.traffic}</td>
-                <td>${site.attacks}</td>
+                <td class="px-4 py-2 border-b border-gray-200">${site.domain}</td>
+                <td class="px-4 py-2 border-b border-gray-200"><span class="inline-block px-2 py-1 text-xs font-semibold rounded-full bg-green-500 text-white">${site.status}</span></td>
+                <td class="px-4 py-2 border-b border-gray-200">${site.traffic}</td>
+                <td class="px-4 py-2 border-b border-gray-200">${site.attacks}</td>
             `;
             tbody.appendChild(tr);
         });

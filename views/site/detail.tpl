@@ -1,79 +1,80 @@
-<div class="row mb-4">
-    <div class="col-md-8">
+<div class="flex flex-wrap mb-4">
+    <div class="w-full md:w-2/3">
         <h1>{{.Site.Name}}</h1>
-        <p class="lead">
-            <span class="badge bg-{{if eq .Site.Status "active"}}success{{else if eq .Site.Status "pending"}}warning{{else}}danger{{end}}">
+        <p class="text-xl">
+            <span class="px-2 py-1 text-xs font-medium rounded-full {{if eq .Site.Status "active"}}bg-green-500{{else if eq .Site.Status "pending"}}bg-yellow-500{{else}}bg-red-500{{end}} text-white">
                 {{.Site.Status}}
             </span>
             {{.Site.Domain}}
         </p>
     </div>
-    <div class="col-md-4 text-md-end">
-        <div class="btn-group" role="group">
-            <a href="/waf/sites/{{.Site.ID}}/edit" class="btn btn-outline-secondary">
+    <div class="w-full md:w-1/3 md:text-right">
+        <div class="inline-flex rounded-md shadow-sm" role="group">
+            <a href="/waf/sites/{{.Site.ID}}/edit" class="px-3 py-2 text-sm font-medium border border-gray-400 text-gray-700 bg-white hover:bg-gray-100 rounded-l-md">
                 <i class="bi bi-pencil"></i> Edit
             </a>
-            <button type="button" class="btn {{if eq .Site.Status "active"}}btn-outline-warning{{else}}btn-outline-success{{end}}" id="toggle-status-btn">
+            <button type="button" class="px-3 py-2 text-sm font-medium border border-l-0 {{if eq .Site.Status "active"}}border-yellow-400 text-yellow-700 hover:bg-yellow-100{{else}}border-green-400 text-green-700 hover:bg-green-100{{end}}" id="toggle-status-btn">
                 <i class="bi {{if eq .Site.Status "active"}}bi-pause-circle{{else}}bi-play-circle{{end}}"></i>
                 {{if eq .Site.Status "active"}}Disable{{else}}Enable{{end}}
             </button>
-            <button type="button" class="btn btn-outline-danger" id="delete-site-btn">
+            <button type="button" class="px-3 py-2 text-sm font-medium border border-l-0 border-red-400 text-red-700 bg-white hover:bg-red-100 rounded-r-md" id="delete-site-btn">
                 <i class="bi bi-trash"></i> Delete
             </button>
         </div>
     </div>
 </div>
 
-<div class="row mb-4">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">Site Information</h5>
+<div class="flex flex-wrap mb-4">
+    <div class="w-full">
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-4 py-3 border-b">
+                <h5 class="text-lg font-medium mb-0">Site Information</h5>
             </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <dl class="row">
-                            <dt class="col-sm-4">Name:</dt>
-                            <dd class="col-sm-8">{{.Site.Name}}</dd>
+            <div class="p-4">
+                <div class="flex flex-wrap">
+                    <div class="w-full md:w-1/2">
+                        <dl class="grid grid-cols-3 gap-4">
+                            <dt class="col-span-1 font-medium">Name:</dt>
+                            <dd class="col-span-2">{{.Site.Name}}</dd>
                             
-                            <dt class="col-sm-4">Domain:</dt>
-                            <dd class="col-sm-8">{{.Site.Domain}}</dd>
+                            <dt class="col-span-1 font-medium">Domain:</dt>
+                            <dd class="col-span-2">{{.Site.Domain}}</dd>
                             
-                            <dt class="col-sm-4">Target URL:</dt>
-                            <dd class="col-sm-8">{{.Site.TargetURL}}</dd>
+                            <dt class="col-span-1 font-medium">Target URL:</dt>
+                            <dd class="col-span-2">{{.Site.TargetURL}}</dd>
                             
-                            <dt class="col-sm-4">Status:</dt>
-                            <dd class="col-sm-8">
-                                <span class="badge bg-{{if eq .Site.Status "active"}}success{{else if eq .Site.Status "pending"}}warning{{else}}danger{{end}}">
+                            <dt class="col-span-1 font-medium">Status:</dt>
+                            <dd class="col-span-2">
+                                <span class="px-2 py-1 text-xs font-medium rounded-full {{if eq .Site.Status "active"}}bg-green-500{{else if eq .Site.Status "pending"}}bg-yellow-500{{else}}bg-red-500{{end}} text-white">
                                     {{.Site.Status}}
                                 </span>
                             </dd>
 
-                            <dt class="col-sm-4">WAF Protection:</dt>
-                            <dd class="col-sm-8">
-                                <div class="d-flex align-items-center">
-                                    <div class="form-check form-switch me-2">
-                                        <input class="form-check-input" type="checkbox" id="waf-toggle" {{if .Site.WAFEnabled}}checked{{end}}
-                                           {{if ne .Site.Status "active"}}disabled{{end}}>
+                            <dt class="col-span-1 font-medium">WAF Protection:</dt>
+                            <dd class="col-span-2">
+                                <div class="flex items-center">
+                                    <div class="relative inline-block w-10 mr-2 align-middle select-none">
+                                        <input type="checkbox" id="waf-toggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
+                                            {{if .Site.WAFEnabled}}checked{{end}} {{if ne .Site.Status "active"}}disabled{{end}}>
+                                        <label for="waf-toggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
                                     </div>
-                                    <span id="waf-status" class="badge {{if .Site.WAFEnabled}}bg-success{{else}}bg-secondary{{end}}">
+                                    <span id="waf-status" class="px-2 py-1 text-xs font-medium rounded-full {{if .Site.WAFEnabled}}bg-green-500{{else}}bg-gray-500{{end}} text-white">
                                         {{if .Site.WAFEnabled}}Enabled{{else}}Disabled{{end}}
                                     </span>
                                 </div>
-                                <small class="text-muted" id="waf-help-text">
+                                <p class="text-xs text-gray-500 mt-1" id="waf-help-text">
                                     {{if ne .Site.Status "active"}}
                                     WAF toggle is disabled because site is not active
                                     {{else}}
                                     Toggle the Web Application Firewall protection for this site
                                     {{end}}
-                                </small>
+                                </p>
                             </dd>
 
-                            <dt class="col-sm-4">HTTPS:</dt>
-                            <dd class="col-sm-8">
+                            <dt class="col-span-1 font-medium">HTTPS:</dt>
+                            <dd class="col-span-2">
                                 {{if .HasValidCertificate}}
-                                <div class="alert alert-success">
+                                <div class="p-4 rounded-md bg-green-100 text-green-700 border border-green-200">
                                     <i class="bi bi-lock-fill"></i> HTTPS is <strong>enabled</strong> for this site
                                     <p class="mb-0 mt-2">
                                         <strong>HTTP:</strong> <code>http://{{.Site.Domain}}:{{.ProxyPort}}</code><br>
@@ -81,7 +82,7 @@
                                     </p>
                                 </div>
                                 {{else}}
-                                <div class="alert alert-secondary">
+                                <div class="p-4 rounded-md bg-gray-100 text-gray-700 border border-gray-200">
                                     <i class="bi bi-unlock"></i> HTTPS is <strong>disabled</strong> for this site
                                     <p class="mb-0">To enable HTTPS, <a href="/waf/certificates/upload">upload an SSL certificate</a> and assign it to this site.</p>
                                 </div>
@@ -89,19 +90,19 @@
                             </dd>
                         </dl>
                     </div>
-                    <div class="col-md-6">
-                        <dl class="row">
-                            <dt class="col-sm-4">Created:</dt>
-                            <dd class="col-sm-8" id="created-date">Loading...</dd>
+                    <div class="w-full md:w-1/2">
+                        <dl class="grid grid-cols-3 gap-4">
+                            <dt class="col-span-1 font-medium">Created:</dt>
+                            <dd class="col-span-2" id="created-date">Loading...</dd>
                             
-                            <dt class="col-sm-4">Total Requests:</dt>
-                            <dd class="col-sm-8">{{.Site.RequestCount}}</dd>
+                            <dt class="col-span-1 font-medium">Total Requests:</dt>
+                            <dd class="col-span-2">{{.Site.RequestCount}}</dd>
                             
-                            <dt class="col-sm-4">Blocked Requests:</dt>
-                            <dd class="col-sm-8">{{.Site.BlockedCount}}</dd>
+                            <dt class="col-span-1 font-medium">Blocked Requests:</dt>
+                            <dd class="col-span-2">{{.Site.BlockedCount}}</dd>
                             
-                            <dt class="col-sm-4">Block Rate:</dt>
-                            <dd class="col-sm-8" id="block-rate">Calculating...</dd>
+                            <dt class="col-span-1 font-medium">Block Rate:</dt>
+                            <dd class="col-span-2" id="block-rate">Calculating...</dd>
                         </dl>
                     </div>
                 </div>
@@ -110,15 +111,15 @@
     </div>
 </div>
 
-<div class="row mb-4">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">How to Use the Reverse Proxy</h5>
+<div class="flex flex-wrap mb-4">
+    <div class="w-full">
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-4 py-3 border-b">
+                <h5 class="text-lg font-medium mb-0">How to Use the Reverse Proxy</h5>
             </div>
-            <div class="card-body">
+            <div class="p-4">
                 {{if eq .Site.Status "active"}}
-                <div class="alert alert-success">
+                <div class="p-4 rounded-md bg-green-100 text-green-700 border border-green-200">
                     <i class="bi bi-check-circle-fill"></i> This site is <strong>active</strong> and being served by the reverse proxy
                 </div>
                 <p>To route traffic through the proxy, you need to:</p>
@@ -127,23 +128,23 @@
                     <li>Make sure the domain <strong>{{.Site.Domain}}</strong> resolves to this server's IP address</li>
                     <li>The proxy server is listening on port <code>{{.ProxyPort}}</code>. You may need to configure your web server or firewall to forward traffic to this port.</li>
                 </ol>
-                <div class="alert alert-info">
-                    <h6><i class="bi bi-info-circle"></i> For local testing</h6>
+                <div class="p-4 rounded-md bg-blue-100 text-blue-700 border border-blue-200">
+                    <h6 class="font-medium"><i class="bi bi-info-circle"></i> For local testing</h6>
                     <p>If testing locally, add an entry to your hosts file:</p>
-                    <pre><code>127.0.0.1  {{.Site.Domain}}</code></pre>
+                    <pre class="bg-gray-100 p-2 rounded"><code>127.0.0.1  {{.Site.Domain}}</code></pre>
                     <p class="mb-0">Then access the site at:
-                        <a href="http://{{.Site.Domain}}:{{.ProxyPort}}" target="_blank">http://{{.Site.Domain}}:{{.ProxyPort}}</a>
+                        <a href="http://{{.Site.Domain}}:{{.ProxyPort}}" target="_blank" class="text-blue-600 hover:text-blue-800">http://{{.Site.Domain}}:{{.ProxyPort}}</a>
                         
                         {{if .HasValidCertificate}}
                         or 
-                        <a href="https://{{.Site.Domain}}:{{.ProxyHTTPSPort}}" target="_blank">https://{{.Site.Domain}}:{{.ProxyHTTPSPort}}</a>
+                        <a href="https://{{.Site.Domain}}:{{.ProxyHTTPSPort}}" target="_blank" class="text-blue-600 hover:text-blue-800">https://{{.Site.Domain}}:{{.ProxyHTTPSPort}}</a>
                         {{else}}
-                        <br><small class="text-muted">(HTTPS is not available - no certificate configured)</small>
+                        <br><span class="text-xs text-gray-500">(HTTPS is not available - no certificate configured)</span>
                         {{end}}
                     </p>
                 </div>
                 {{else}}
-                <div class="alert alert-warning">
+                <div class="p-4 rounded-md bg-yellow-100 text-yellow-700 border border-yellow-200">
                     <i class="bi bi-exclamation-triangle-fill"></i> This site is currently <strong>inactive</strong>
                 </div>
                 <p>Activate the site using the toggle button above to enable proxy functionality.</p>
@@ -153,61 +154,61 @@
     </div>
 </div>
 
-<div class="row mb-4">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="card-title mb-0">Traffic Overview</h5>
-                <div class="btn-group btn-group-sm">
-                    <button type="button" class="btn btn-outline-secondary active" data-period="24h">24h</button>
-                    <button type="button" class="btn btn-outline-secondary" data-period="7d">7d</button>
-                    <button type="button" class="btn btn-outline-secondary" data-period="30d">30d</button>
+<div class="flex flex-wrap mb-4">
+    <div class="w-full md:w-1/2">
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-4 py-3 border-b flex justify-between items-center">
+                <h5 class="text-lg font-medium mb-0">Traffic Overview</h5>
+                <div class="inline-flex rounded-md shadow-sm">
+                    <button type="button" class="px-2 py-1 text-sm font-medium border border-gray-400 text-gray-700 bg-gray-100 rounded-l-md active" data-period="24h">24h</button>
+                    <button type="button" class="px-2 py-1 text-sm font-medium border-t border-b border-gray-400 text-gray-700 bg-white hover:bg-gray-100" data-period="7d">7d</button>
+                    <button type="button" class="px-2 py-1 text-sm font-medium border border-gray-400 text-gray-700 bg-white hover:bg-gray-100 rounded-r-md" data-period="30d">30d</button>
                 </div>
             </div>
-            <div class="card-body">
+            <div class="p-4">
                 <canvas id="trafficChart" height="250"></canvas>
             </div>
         </div>
     </div>
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="card-title mb-0">Attack Types</h5>
-                <div class="btn-group btn-group-sm">
-                    <button type="button" class="btn btn-outline-secondary active" data-period="24h">24h</button>
-                    <button type="button" class="btn btn-outline-secondary" data-period="7d">7d</button>
-                    <button type="button" class="btn btn-outline-secondary" data-period="30d">30d</button>
+    <div class="w-full md:w-1/2">
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-4 py-3 border-b flex justify-between items-center">
+                <h5 class="text-lg font-medium mb-0">Attack Types</h5>
+                <div class="inline-flex rounded-md shadow-sm">
+                    <button type="button" class="px-2 py-1 text-sm font-medium border border-gray-400 text-gray-700 bg-gray-100 rounded-l-md active" data-period="24h">24h</button>
+                    <button type="button" class="px-2 py-1 text-sm font-medium border-t border-b border-gray-400 text-gray-700 bg-white hover:bg-gray-100" data-period="7d">7d</button>
+                    <button type="button" class="px-2 py-1 text-sm font-medium border border-gray-400 text-gray-700 bg-white hover:bg-gray-100 rounded-r-md" data-period="30d">30d</button>
                 </div>
             </div>
-            <div class="card-body">
+            <div class="p-4">
                 <canvas id="attackTypesChart" height="250"></canvas>
             </div>
         </div>
     </div>
 </div>
 
-<div class="row">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="card-title mb-0">Recent Attacks</h5>
-                <a href="/waf/logs?site={{.Site.ID}}" class="btn btn-sm btn-outline-primary">View All Logs</a>
+<div class="flex flex-wrap">
+    <div class="w-full">
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-4 py-3 border-b flex justify-between items-center">
+                <h5 class="text-lg font-medium mb-0">Recent Attacks</h5>
+                <a href="/waf/logs?site={{.Site.ID}}" class="px-3 py-1 text-sm border border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white rounded-md">View All Logs</a>
             </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead>
+            <div class="p-0">
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
                             <tr>
-                                <th>Time</th>
-                                <th>IP Address</th>
-                                <th>Attack Type</th>
-                                <th>Rule ID</th>
-                                <th>Request Path</th>
+                                <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Time</th>
+                                <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">IP Address</th>
+                                <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Attack Type</th>
+                                <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Rule ID</th>
+                                <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Request Path</th>
                             </tr>
                         </thead>
-                        <tbody id="recent-attacks">
+                        <tbody id="recent-attacks" class="divide-y">
                             <tr>
-                                <td colspan="5" class="text-center">Loading recent attacks...</td>
+                                <td colspan="5" class="px-4 py-2 text-center">Loading recent attacks...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -218,20 +219,25 @@
 </div>
 
 <!-- Delete Confirmation Modal -->
-<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Delete Site</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+<div id="deleteModal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-hidden="true">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="fixed inset-0 bg-black bg-opacity-50 transition-opacity" id="modal-backdrop"></div>
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full z-10">
+            <div class="px-4 py-3 border-b flex justify-between items-center">
+                <h5 class="text-lg font-medium">Delete Site</h5>
+                <button type="button" class="text-gray-500 hover:text-gray-700" id="modal-close">
+                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
             </div>
-            <div class="modal-body">
+            <div class="px-4 py-3">
                 <p>Are you sure you want to delete <strong>{{.Site.Name}}</strong>?</p>
-                <p class="text-danger">This action cannot be undone and will remove all settings and statistics for this site.</p>
+                <p class="text-red-500">This action cannot be undone and will remove all settings and statistics for this site.</p>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-danger" id="confirm-delete">Delete</button>
+            <div class="px-4 py-3 border-t flex justify-end space-x-2">
+                <button type="button" class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded" id="cancel-delete">Cancel</button>
+                <button type="button" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded" id="confirm-delete">Delete</button>
             </div>
         </div>
     </div>
@@ -270,12 +276,12 @@ document.addEventListener('DOMContentLoaded', function() {
             // Update UI to reflect new state
             if (response.data.wafEnabled) {
                 wafStatus.textContent = 'Enabled';
-                wafStatus.className = 'badge bg-success';
+                wafStatus.className = 'px-2 py-1 text-xs font-medium rounded-full bg-green-500 text-white';
                 wafHelpText.textContent = 'Web Application Firewall protection is enabled for this site';
                 showToast('WAF protection enabled successfully', 'success');
             } else {
                 wafStatus.textContent = 'Disabled';
-                wafStatus.className = 'badge bg-secondary';
+                wafStatus.className = 'px-2 py-1 text-xs font-medium rounded-full bg-gray-500 text-white';
                 wafHelpText.textContent = 'Web Application Firewall protection is disabled for this site';
                 showToast('WAF protection disabled successfully', 'warning');
             }
@@ -304,9 +310,16 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Delete site
     document.getElementById('delete-site-btn').addEventListener('click', function() {
-        const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
-        modal.show();
+        document.getElementById('deleteModal').classList.remove('hidden');
     });
+    
+    document.getElementById('modal-close').addEventListener('click', closeModal);
+    document.getElementById('cancel-delete').addEventListener('click', closeModal);
+    document.getElementById('modal-backdrop').addEventListener('click', closeModal);
+    
+    function closeModal() {
+        document.getElementById('deleteModal').classList.add('hidden');
+    }
     
     document.getElementById('confirm-delete').addEventListener('click', async function() {
         try {
@@ -320,8 +333,7 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Error deleting site:', error);
             showToast('Failed to delete site', 'danger');
             // Hide modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('deleteModal'));
-            modal.hide();
+            closeModal();
         }
     });
     
@@ -435,31 +447,37 @@ document.addEventListener('DOMContentLoaded', function() {
         tbody.innerHTML = '';
         
         if (attacks.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center">No recent attacks detected</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-2 text-center">No recent attacks detected</td></tr>';
             return;
         }
         
         attacks.forEach(attack => {
             const tr = document.createElement('tr');
+            tr.className = 'hover:bg-gray-50';
             tr.innerHTML = `
-                <td>${attack.time}</td>
-                <td>${attack.ip}</td>
-                <td><span class="badge bg-danger">${attack.type}</span></td>
-                <td>${attack.rule}</td>
-                <td>${attack.path}</td>
+                <td class="px-4 py-2">${attack.time}</td>
+                <td class="px-4 py-2">${attack.ip}</td>
+                <td class="px-4 py-2"><span class="px-2 py-1 text-xs font-medium rounded-full bg-red-500 text-white">${attack.type}</span></td>
+                <td class="px-4 py-2">${attack.rule}</td>
+                <td class="px-4 py-2">${attack.path}</td>
             `;
             tbody.appendChild(tr);
         });
     }
     
     // Time period selector for charts
-    document.querySelectorAll('.btn-group[data-period]').forEach(group => {
+    document.querySelectorAll('.inline-flex[data-period]').forEach(group => {
         group.addEventListener('click', function(e) {
             if (e.target.tagName === 'BUTTON') {
-                // Remove active class from all buttons in this group
-                this.querySelectorAll('.btn').forEach(btn => btn.classList.remove('active'));
-                // Add active class to clicked button
-                e.target.classList.add('active');
+                // Remove active class and background from all buttons in this group
+                this.querySelectorAll('.active').forEach(btn => {
+                    btn.classList.remove('active', 'bg-gray-100');
+                    btn.classList.add('bg-white');
+                });
+                
+                // Add active class and background to clicked button
+                e.target.classList.add('active', 'bg-gray-100');
+                e.target.classList.remove('bg-white');
                 
                 // Get selected period
                 const period = e.target.getAttribute('data-period');
@@ -470,5 +488,34 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+    
+    // Add custom styles for toggle switch
+    const style = document.createElement('style');
+    style.textContent = `
+        .toggle-checkbox:checked {
+            @apply: right-0 border-green-500;
+            right: 0;
+            border-color: #10B981;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            @apply: bg-green-500;
+            background-color: #10B981;
+        }
+    `;
+    document.head.appendChild(style);
 });
 </script>
+
+<!-- Add CSS for toggle switch -->
+<style>
+    .toggle-checkbox:checked {
+        right: 0;
+        border-color: #10B981;
+    }
+    .toggle-checkbox:checked + .toggle-label {
+        background-color: #10B981;
+    }
+    .toggle-label {
+        transition: background-color 0.2s ease;
+    }
+</style>

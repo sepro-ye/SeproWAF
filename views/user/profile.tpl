@@ -1,60 +1,79 @@
-<div class="row mb-4">
-    <div class="col">
-        <h1>User Profile</h1>
-    </div>
+<div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold text-gray-800">User Profile</h1>
 </div>
 
-<div class="row">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">Profile Information</h5>
-            </div>
-            <div class="card-body">
-                <form id="profile-form">
-                    <div class="mb-3">
-                        <label for="username" class="form-label">Username</label>
-                        <input type="text" class="form-control" id="username" value="{{.Username}}" readonly>
-                    </div>
-                    <div class="mb-3">
-                        <label for="email" class="form-label">Email</label>
-                        <input type="email" class="form-control" id="email" name="email" value="{{.Email}}">
-                    </div>
-                    <div class="mb-3">
-                        <label for="role" class="form-label">Role</label>
-                        <input type="text" class="form-control" id="role" value="{{.Role}}" readonly>
-                    </div>
-                    <div class="alert alert-success d-none" id="profile-success"></div>
-                    <div class="alert alert-danger d-none" id="profile-error"></div>
-                    <button type="submit" class="btn btn-primary">Update Profile</button>
-                </form>
-            </div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <!-- Profile Information Card -->
+    <div class="bg-white rounded-xl shadow-md overflow-hidden">
+        <div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-800">Profile Information</h2>
+        </div>
+        <div class="p-6">
+            <form id="profile-form">
+                <div class="mb-4">
+                    <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                    <input type="text" id="username" value="{{.Username}}" readonly
+                        class="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-gray-500 cursor-not-allowed">
+                </div>
+                <div class="mb-4">
+                    <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input type="email" id="email" name="email" value="{{.Email}}"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="mb-4">
+                    <label for="role" class="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                    <input type="text" id="role" value="{{.Role}}" readonly 
+                        class="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-gray-500 cursor-not-allowed">
+                </div>
+                
+                <!-- Success message -->
+                <div id="profile-success" class="hidden mb-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative"></div>
+                
+                <!-- Error message -->
+                <div id="profile-error" class="hidden mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative"></div>
+                
+                <button type="submit" 
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-200">
+                    Update Profile
+                </button>
+            </form>
         </div>
     </div>
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">Change Password</h5>
-            </div>
-            <div class="card-body">
-                <form id="password-form">
-                    <div class="mb-3">
-                        <label for="current-password" class="form-label">Current Password</label>
-                        <input type="password" class="form-control" id="current-password" name="current-password" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="new-password" class="form-label">New Password</label>
-                        <input type="password" class="form-control" id="new-password" name="new-password" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="confirm-password" class="form-label">Confirm New Password</label>
-                        <input type="password" class="form-control" id="confirm-password" name="confirm-password" required>
-                    </div>
-                    <div class="alert alert-success d-none" id="password-success"></div>
-                    <div class="alert alert-danger d-none" id="password-error"></div>
-                    <button type="submit" class="btn btn-primary">Change Password</button>
-                </form>
-            </div>
+    
+    <!-- Change Password Card -->
+    <div class="bg-white rounded-xl shadow-md overflow-hidden">
+        <div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-800">Change Password</h2>
+        </div>
+        <div class="p-6">
+            <form id="password-form">
+                <div class="mb-4">
+                    <label for="current-password" class="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
+                    <input type="password" id="current-password" name="current-password" required
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="mb-4">
+                    <label for="new-password" class="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                    <input type="password" id="new-password" name="new-password" required
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="mb-4">
+                    <label for="confirm-password" class="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+                    <input type="password" id="confirm-password" name="confirm-password" required
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                
+                <!-- Success message -->
+                <div id="password-success" class="hidden mb-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative"></div>
+                
+                <!-- Error message -->
+                <div id="password-error" class="hidden mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative"></div>
+                
+                <button type="submit" 
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-200">
+                    Change Password
+                </button>
+            </form>
         </div>
     </div>
 </div>
@@ -82,12 +101,12 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             
             profileSuccess.textContent = 'Profile updated successfully';
-            profileSuccess.classList.remove('d-none');
-            profileError.classList.add('d-none');
+            profileSuccess.classList.remove('hidden');
+            profileError.classList.add('hidden');
         } catch (error) {
             profileError.textContent = error.response?.data?.error || 'Failed to update profile';
-            profileError.classList.remove('d-none');
-            profileSuccess.classList.add('d-none');
+            profileError.classList.remove('hidden');
+            profileSuccess.classList.add('hidden');
         }
     });
     
@@ -101,8 +120,8 @@ document.addEventListener('DOMContentLoaded', function() {
         
         if (newPassword !== confirmPassword) {
             passwordError.textContent = 'New passwords do not match';
-            passwordError.classList.remove('d-none');
-            passwordSuccess.classList.add('d-none');
+            passwordError.classList.remove('hidden');
+            passwordSuccess.classList.add('hidden');
             return;
         }
         
@@ -114,8 +133,8 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             
             passwordSuccess.textContent = 'Password changed successfully';
-            passwordSuccess.classList.remove('d-none');
-            passwordError.classList.add('d-none');
+            passwordSuccess.classList.remove('hidden');
+            passwordError.classList.add('hidden');
             
             // Clear password fields
             document.getElementById('current-password').value = '';
@@ -123,8 +142,8 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('confirm-password').value = '';
         } catch (error) {
             passwordError.textContent = error.response?.data?.error || 'Failed to change password';
-            passwordError.classList.remove('d-none');
-            passwordSuccess.classList.add('d-none');
+            passwordError.classList.remove('hidden');
+            passwordSuccess.classList.add('hidden');
         }
     });
 });
