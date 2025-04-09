@@ -193,8 +193,6 @@ go test ./...
 ```
 
 ---
+Test commit and push
 
-## 📄 License
-
-[Insert your preferred license here]
 ```
