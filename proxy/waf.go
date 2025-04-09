@@ -78,7 +78,10 @@ SecRule ARGS "@rx (<script>|SELECT.+FROM|INSERT.+INTO)" "id:1002,phase:2,deny,lo
 		}
 	}
 
-	cfg := coraza.NewWAFConfig().WithDirectivesFromFile(rulesDir + "coraza.conf").WithDirectivesFromFile(rulesDir + "coreruleset/crs-setup.conf.example").WithDirectivesFromFile(rulesDir + "coreruleset/rules/*.conf")
+	cfg := coraza.NewWAFConfig().
+		WithDirectivesFromFile(filepath.Join(rulesDir, "coraza.conf")).
+		WithDirectivesFromFile(filepath.Join(rulesDir, "coreruleset", "crs-setup.conf.example")).
+		WithDirectivesFromFile(filepath.Join(rulesDir, "coreruleset", "rules", "*.conf"))
 
 	waf, err := coraza.NewWAF(cfg)
 	if err != nil {
