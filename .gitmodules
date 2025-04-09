@@ -1,0 +1,3 @@
+[submodule "rules/coreruleset"]
+	path = rules/coreruleset
+	url = https://github.com/coreruleset/coreruleset
