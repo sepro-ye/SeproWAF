@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/beego/beego/v2/core/logs"
@@ -159,7 +160,10 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 		if intervention := tx.Interruption(); intervention != nil {
 			logs.Warning("WAF blocked request to %s during header processing: %s (status: %d)",
 				siteDomain, intervention.Action, intervention.Status)
-			http.Error(w, "Forbidden", intervention.Status)
+
+			// Use error template instead of basic HTTP error
+			serveWAFErrorPage(w, "Request Blocked", intervention.Status,
+				"The WAF has blocked this request due to a security violation")
 			return
 		}
 
@@ -179,7 +183,10 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 					logs.Error("WAF request body processing error: %v", err)
 				} else if interrupt != nil {
 					logs.Warning("WAF blocked request to %s during body processing", siteDomain)
-					http.Error(w, "Forbidden", http.StatusForbidden)
+
+					// Use error template instead of basic HTTP error
+					serveWAFErrorPage(w, "Request Blocked", http.StatusForbidden,
+						"The WAF has blocked this request due to a security violation in the body content")
 					return
 				}
 			}
@@ -192,7 +199,10 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 		if intervention := tx.Interruption(); intervention != nil {
 			logs.Warning("WAF blocked request to %s after body processing: %s (status: %d)",
 				siteDomain, intervention.Action, intervention.Status)
-			http.Error(w, "Forbidden", intervention.Status)
+
+			// Use error template instead of basic HTTP error
+			serveWAFErrorPage(w, "Request Blocked", intervention.Status,
+				"The WAF has blocked this request due to a security violation")
 			return
 		}
 
@@ -237,6 +247,33 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 		// Write the response body if not blocked
 		w.Write(rww.body)
 	})
+}
+
+// serveWAFErrorPage renders a custom WAF block page
+func serveWAFErrorPage(w http.ResponseWriter, title string, statusCode int, message string) {
+	// Set status code and content type
+	w.WriteHeader(statusCode)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// Path to the WAF block page
+	blockPagePath := "proxy/waf_block.html"
+
+	// Read the HTML file
+	content, err := os.ReadFile(blockPagePath)
+	if err != nil {
+		// If we can't read the file, fall back to a simple error message
+		logs.Error("Failed to read WAF block page: %v", err)
+		http.Error(w, "Security alert: This request has been blocked ("+message+")", statusCode)
+		return
+	}
+
+	// Simple replacement of placeholders in the HTML
+	htmlContent := string(content)
+	htmlContent = strings.Replace(htmlContent, "{{.ErrorCode}}", fmt.Sprintf("%d", statusCode), -1)
+	htmlContent = strings.Replace(htmlContent, "{{.ErrorMessage}}", message, -1)
+
+	// Write the response
+	w.Write([]byte(htmlContent))
 }
 
 // responseWriterWrapper wraps an http.ResponseWriter to capture the response

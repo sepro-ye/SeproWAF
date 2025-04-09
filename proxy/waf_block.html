@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Alert - Request Blocked</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 30px;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+        .header {
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            color: #e53935;
+            margin-bottom: 10px;
+        }
+        .content {
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        .error-code {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 20px;
+            font-family: monospace;
+        }
+        .shield-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="shield-icon">🛡️</div>
+        <div class="header">
+            <h1>Security Alert</h1>
+            <h2>This request has been blocked</h2>
+        </div>
+        <div class="content">
+            <p>Our Web Application Firewall (WAF) has detected potentially malicious activity and blocked this request for security reasons.</p>
+            <p>If you believe this is a mistake, please contact the site administrator.</p>
+            <div class="error-code">
+                <strong>Error Code:</strong> {{.ErrorCode}}<br>
+                <strong>Reason:</strong> {{.ErrorMessage}}
+            </div>
+        </div>
+        <div>
+            <p>Powered by SeproWAF</p>
+        </div>
+    </div>
+</body>
+</html>
