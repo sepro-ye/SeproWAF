@@ -1,10 +1,6 @@
-Sure! Here's a cleaned-up and professional rewrite of your README:
-
----
-
 # SeproWAF
 
-**SeproWAF** is a Web Application Firewall (WAF) built using the [Beego](https://beego.me/) framework in Go. It provides essential security features for web applications including authentication, user management, and role-based access control.
+**SeproWAF** is a Web Application Firewall (WAF) built using the [Beego](https://beego.me/) framework in Go. It provides robust security capabilities including authentication, user management, site protection, SSL-enabled proxying, and WAF filtering powered by [Coraza](https://www.coraza.io/).
 
 ---
 
@@ -13,8 +9,10 @@ Sure! Here's a cleaned-up and professional rewrite of your README:
 - JWT-based user authentication  
 - Role-based access control (Admin & User roles)  
 - RESTful API structure  
-- User management system  
+- User and site management system  
 - MySQL database integration  
+- Optional reverse proxy with SSL support  
+- WAF integration using Coraza (Core Rule Set powered)
 
 ---
 
@@ -32,8 +30,10 @@ Make sure you have the following installed:
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/SeproWAF.git
+   git clone https://github.com/sepro-ye/SeproWAF.git
    cd SeproWAF
+
+   git submodule update --init --recursive
    ```
 
 2. **Install Go dependencies**
@@ -41,25 +41,30 @@ Make sure you have the following installed:
    go mod tidy
    ```
 
-3. **Configure the database in `app.conf`**
+3. **Configure the database and JWT in `app.conf`**
    ```
    MYSQL_USER=your_db_user
    MYSQL_PASSWORD=your_db_password
    MYSQL_HOST=localhost
    MYSQL_PORT=3306
    MYSQL_DATABASE=sepro_waf
-   ```
 
-4. **Set your JWT secret key in `app.conf`**
-   ```
    JWTSecret=your-secret-key-here
+
+   # Proxy configuration
+   ProxyPort = 8080
+   ProxyHTTPSPort = 8443
+
+   # WAF configuration
+   WAFRulesDir = rules/
+   WAFLogDir = logs/waf
    ```
 
 ---
 
 ## 🗄️ Database Setup
 
-Use the `wafdb` tool to set up and manage the database.
+Use the `wafdb` tool to initialize and manage the database.
 
 1. **Run migrations**
    ```bash
@@ -68,23 +73,23 @@ Use the `wafdb` tool to set up and manage the database.
 
 2. **Create an admin user**
    ```bash
-   go run main.go --create-admin
-        --admin-user=admin
-        --admin-email=admin@example.com
-        --admin-pass=admin
+   go run main.go --create-admin \
+     --admin-user=admin \
+     --admin-email=admin@example.com \
+     --admin-pass=admin
    ```
 
 ---
 
 ## ▶️ Running the Application
 
-Start the server with:
+Start the server using:
 
 ```bash
 bee run
 ```
 
-The application will be running at:  
+The app will be available at:  
 👉 **http://localhost:8000**
 
 ---
@@ -92,16 +97,66 @@ The application will be running at:
 ## 📡 API Endpoints
 
 ### 🔐 Authentication
-- `POST /api/auth/register` - Register a new user  
-- `POST /api/auth/login` - Login  
-- `POST /api/auth/logout` - Logout *(Requires authentication)*
+- `POST /api/auth/register` – Register a new user  
+- `POST /api/auth/login` – Login  
+- `POST /api/auth/logout` – Logout *(Requires authentication)*
 
 ### 👤 User Management
-- `GET /api/user/profile` - Get current user profile *(Auth required)*  
-- `GET /api/user/:id` - Get a specific user *(Auth required)*  
-- `PUT /api/user/:id` - Update a user *(Auth required)*  
-- `DELETE /api/user/:id/delete` - Delete a user *(Admin only)*  
-- `GET /api/users` - List all users *(Admin only)*
+- `GET /api/user/profile` – Get current user profile *(Auth required)*  
+- `GET /api/user/:id` – Get a specific user *(Auth required)*  
+- `PUT /api/user/:id` – Update a user *(Auth required)*  
+- `DELETE /api/user/:id/delete` – Delete a user *(Admin only)*  
+- `GET /api/users` – List all users *(Admin only)*
+
+### 🌐 Site Management
+- `GET /api/sites` – List all sites *(Auth required)*  
+- `POST /api/sites` – Create a new site  
+- `GET /api/sites/:id` – Get site details  
+- `PUT /api/sites/:id` – Update a site  
+- `DELETE /api/sites/:id` – Delete a site  
+- `POST /api/sites/:id/toggle-status` – Enable/disable a site  
+- `POST /api/sites/:id/toggle-waf` – Enable/disable WAF for a site  
+- `GET /api/sites/:id/stats` – View site stats (e.g., requests blocked)
+
+### 🔐 SSL Certificate Management
+- `GET /api/certificates` – List uploaded certificates  
+- `POST /api/certificates` – Upload a new certificate  
+- `GET /api/certificates/:id` – View a certificate  
+- `DELETE /api/certificates/:id` – Delete a certificate
+
+---
+
+## 🧑‍💻 UI Views
+
+Accessible through a browser at `http://localhost:8000`:
+
+- `/` – Home page  
+- `/auth/login` – Login page  
+- `/auth/register` – Register page  
+- `/dashboard` – User/admin dashboard  
+- `/user/profile` – View user profile  
+- `/admin/users` – Admin-only user list
+
+### 🔧 Site Management UI
+- `/waf/sites` – List of protected sites  
+- `/waf/sites/new` – Add a new site  
+- `/waf/sites/:id` – View site details  
+- `/waf/sites/:id/edit` – Edit site configuration
+
+### 🔐 Certificate Management UI
+- `/waf/certificates` – Uploaded SSL certificates  
+- `/waf/certificates/upload` – Upload new certificate
+
+---
+
+## 🛡️ WAF & Proxy (Optional)
+
+SeproWAF includes an integrated **reverse proxy** to forward traffic to backend apps while enforcing security policies via **Coraza WAF**.
+
+- Core Rule Set (CRS) is included via Git submodule (`rules/coreruleset/`)
+- SSL termination and forwarding supported (via uploaded certs)
+- WAF rules are evaluated before forwarding requests
+- Toggle WAF per site using the API or UI
 
 ---
 
@@ -110,26 +165,28 @@ The application will be running at:
 ```
 SeproWAF/
 ├── cmd/             # Command-line tools
-│   └── wafdb/       # Database management tool
+│   └── wafdb/       # Database setup & migrations
 ├── conf/            # Configuration files
-├── controllers/     # Application logic
-├── database/        # DB utilities and connections
-├── middleware/      # Custom middleware
-├── models/          # Data models
-├── routers/         # Route definitions
-├── static/          # Static files (CSS, JS, etc.)
-├── tests/           # Test files
-├── views/           # HTML templates
-├── go.mod           # Go module definition
+├── controllers/     # Route handlers (UI & API)
+├── database/        # DB initialization and queries
+├── middleware/      # JWT & RBAC middleware
+├── models/          # Data models and ORM logic
+├── routers/         # Beego router definitions
+├── static/          # Static assets (JS, CSS, etc.)
+├── tests/           # Unit and integration tests
+├── views/           # HTML templates for UI
+├── proxy/           # WAF engine and reverse proxy logic
+├── rules/           # CoreRuleSet (as a submodule)
+├── go.mod           # Go module file
 ├── go.sum           # Dependency checksums
-└── main.go          # Application entry point
+└── main.go          # App entry point
 ```
 
 ---
 
 ## 🧪 Development
 
-To run the tests:
+Run all tests using:
 
 ```bash
 go test ./...
@@ -140,7 +197,4 @@ go test ./...
 ## 📄 License
 
 [Insert your preferred license here]
-
----
-
-Let me know if you'd like it tailored more for open-source contribution or internal use!
+```
