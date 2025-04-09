@@ -247,43 +247,37 @@ func (ps *ProxyServer) LoadActiveSites() error {
 
 // MonitorSiteChanges periodically checks for changes in site configurations
 func (ps *ProxyServer) MonitorSiteChanges() {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			ps.LoadActiveSites() // Refresh the site list
-		}
+	for range ticker.C {
+		ps.LoadActiveSites() // Refresh the site list
 	}
 }
 
 // MonitorCertificates checks for certificate changes and starts HTTPS when needed
 func (ps *ProxyServer) MonitorCertificates() {
 	httpsStarted := false
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			if !httpsStarted {
-				// Check if we have certificates now
-				ps.certManager.mutex.RLock()
-				hasCertificates := len(ps.certManager.certificates) > 0
-				ps.certManager.mutex.RUnlock()
+	for range ticker.C {
+		if !httpsStarted {
+			// Check if we have certificates now
+			ps.certManager.mutex.RLock()
+			hasCertificates := len(ps.certManager.certificates) > 0
+			ps.certManager.mutex.RUnlock()
 
-				if hasCertificates {
-					// Start HTTPS server
-					go func() {
-						logs.Info("Certificates available - starting HTTPS proxy server on port %d", ps.httpsPort)
-						if err := ps.httpsServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-							logs.Error("HTTPS server error: %v", err)
-							logs.Warning("HTTPS server failed to start. SSL functionality will be unavailable.")
-						}
-					}()
-					httpsStarted = true
-				}
+			if hasCertificates {
+				// Start HTTPS server
+				go func() {
+					logs.Info("Certificates available - starting HTTPS proxy server on port %d", ps.httpsPort)
+					if err := ps.httpsServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+						logs.Error("HTTPS server error: %v", err)
+						logs.Warning("HTTPS server failed to start. SSL functionality will be unavailable.")
+					}
+				}()
+				httpsStarted = true
 			}
 		}
 	}
