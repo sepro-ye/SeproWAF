@@ -333,6 +333,32 @@ func (c *UIController) WAFRuleEdit() {
 	c.TplName = "waf/rule_edit.tpl"
 }
 
+// WAFLogsList renders the WAF logs list page
+func (c *UIController) WAFLogsList() {
+	c.Data["Title"] = "WAF Security Logs"
+	c.Data["ActiveMenu"] = "waf_logs"
+	c.Layout = "layout.tpl"
+	c.TplName = "waf/logs_list.tpl"
+}
+
+// WAFLogDetail renders the WAF log detail page
+func (c *UIController) WAFLogDetail() {
+	c.Data["Title"] = "Security Log Details"
+	c.Data["ActiveMenu"] = "waf_logs"
+
+	// Get log ID from URL
+	idStr := c.Ctx.Input.Param(":id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.Abort("404")
+		return
+	}
+
+	c.Data["LogID"] = id
+	c.Layout = "layout.tpl"
+	c.TplName = "waf/log_detail.tpl"
+}
+
 // Helper to get user from JWT token
 func (c *UIController) GetUserFromJWT() *models.User {
 	authHeader := c.Ctx.Input.Header("Authorization")

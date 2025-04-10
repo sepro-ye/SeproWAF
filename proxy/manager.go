@@ -57,6 +57,12 @@ func StopProxyServer() error {
 	if proxyServer != nil {
 		err := proxyServer.Stop()
 		proxyServer = nil
+
+		// Shutdown the WAF log service
+		if wafLogService != nil {
+			wafLogService.Shutdown()
+		}
+
 		return err
 	}
 	return nil

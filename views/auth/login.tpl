@@ -65,7 +65,6 @@
       loginError.classList.add('hidden');
 
       try {
-        console.log('Attempting to login...');
         const response = await api.post('/auth/login', {
           username: username,
           password: password

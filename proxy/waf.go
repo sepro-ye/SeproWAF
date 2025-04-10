@@ -25,11 +25,28 @@ var (
 	ruleGenerator *services.RuleGenerator
 	ruleVersions  map[int]int64
 	ruleMutex     sync.RWMutex
+	wafLogService *services.WAFLogService
 )
 
 func init() {
 	ruleGenerator = services.NewRuleGenerator()
 	ruleVersions = make(map[int]int64)
+
+	// Initialize the WAF log service
+	// Get config values from app.conf if available
+	bufferSize, _ := web.AppConfig.Int("WAFLogBufferSize")
+	if bufferSize <= 0 {
+		bufferSize = 100
+	}
+
+	logDetails, _ := web.AppConfig.Bool("WAFLogDetails")
+	retention, _ := web.AppConfig.Int("WAFLogRetention")
+	if retention <= 0 {
+		retention = 30
+	}
+
+	wafLogService = services.NewWAFLogService(bufferSize, logDetails, retention)
+	logs.Info("WAF logging service initialized")
 }
 
 // WAFManager manages Coraza WAF instances for each site
@@ -205,6 +222,8 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 		// Debug logging for every incoming request
 		logs.Debug("WAF processing request: %s %s from %s", r.Method, r.URL.String(), r.RemoteAddr)
 
+		startTime := time.Now()
+
 		// Get WAF instance for this site
 		waf, err := wm.GetWAF(siteID)
 		if err != nil {
@@ -247,6 +266,11 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 			logs.Warning("WAF blocked request to %s during header processing: %s (status: %d)",
 				siteDomain, intervention.Action, intervention.Status)
 
+			// Log WAF blocking event
+			processingTime := time.Since(startTime).Milliseconds()
+			wafLogService.LogWAFEvent(tx, r, &w, siteID, siteDomain, "blocked",
+				processingTime, 0, intervention.Status, 0)
+
 			// Use error template instead of basic HTTP error
 			serveWAFErrorPage(w, "Request Blocked", intervention.Status,
 				"The WAF has blocked this request due to a security violation")
@@ -270,6 +294,11 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 				} else if interrupt != nil {
 					logs.Warning("WAF blocked request to %s during body processing", siteDomain)
 
+					// Log WAF blocking event
+					processingTime := time.Since(startTime).Milliseconds()
+					wafLogService.LogWAFEvent(tx, r, &w, siteID, siteDomain, "blocked",
+						processingTime, 0, http.StatusForbidden, 0)
+
 					// Use error template instead of basic HTTP error
 					serveWAFErrorPage(w, "Request Blocked", http.StatusForbidden,
 						"The WAF has blocked this request due to a security violation in the body content")
@@ -285,6 +314,11 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 		if intervention := tx.Interruption(); intervention != nil {
 			logs.Warning("WAF blocked request to %s after body processing: %s (status: %d)",
 				siteDomain, intervention.Action, intervention.Status)
+
+			// Log WAF blocking event
+			processingTime := time.Since(startTime).Milliseconds()
+			wafLogService.LogWAFEvent(tx, r, &w, siteID, siteDomain, "blocked",
+				processingTime, 0, intervention.Status, 0)
 
 			// Use error template instead of basic HTTP error
 			serveWAFErrorPage(w, "Request Blocked", intervention.Status,
@@ -315,6 +349,12 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 				logs.Error("WAF response body processing error: %v", err)
 			} else if interrupt != nil {
 				logs.Warning("WAF blocked response from %s during body processing", siteDomain)
+
+				// Log WAF blocking event (response)
+				processingTime := time.Since(startTime).Milliseconds()
+				wafLogService.LogWAFEvent(tx, r, &w, siteID, siteDomain, "blocked_response",
+					processingTime, rww.statusCode, http.StatusForbidden, int64(len(rww.body)))
+
 				http.Error(w, "Forbidden", http.StatusForbidden)
 				return
 			}
@@ -326,9 +366,20 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 		// Check if the response should be blocked
 		if intervention := tx.Interruption(); intervention != nil {
 			logs.Warning("WAF blocked response from %s: %s", siteDomain, intervention.Action)
+
+			// Log WAF blocking event (response)
+			processingTime := time.Since(startTime).Milliseconds()
+			wafLogService.LogWAFEvent(tx, r, &w, siteID, siteDomain, "blocked_response",
+				processingTime, rww.statusCode, http.StatusForbidden, int64(len(rww.body)))
+
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
+
+		// Log allowed request
+		processingTime := time.Since(startTime).Milliseconds()
+		wafLogService.LogWAFEvent(tx, r, &w, siteID, siteDomain, "allowed",
+			processingTime, rww.statusCode, 0, int64(len(rww.body)))
 
 		// Write the response body if not blocked
 		w.Write(rww.body)
