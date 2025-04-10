@@ -10,11 +10,27 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
+	"SeproWAF/models"
+	"SeproWAF/services"
+
+	"github.com/beego/beego/v2/client/orm"
 	"github.com/beego/beego/v2/core/logs"
 	"github.com/beego/beego/v2/server/web"
 	"github.com/corazawaf/coraza/v3"
 )
+
+var (
+	ruleGenerator *services.RuleGenerator
+	ruleVersions  map[int]int64
+	ruleMutex     sync.RWMutex
+)
+
+func init() {
+	ruleGenerator = services.NewRuleGenerator()
+	ruleVersions = make(map[int]int64)
+}
 
 // WAFManager manages Coraza WAF instances for each site
 type WAFManager struct {
@@ -32,57 +48,84 @@ func NewWAFManager() (*WAFManager, error) {
 	return manager, nil
 }
 
-// loadRules loads the Coraza rules and creates a WAF instance
-func (wm *WAFManager) loadRules() (coraza.WAF, error) {
-	// Try to get rules directory from config
+// GenerateCustomRulesFile generates a file containing all custom rules for a site
+func (wm *WAFManager) GenerateCustomRulesFile(siteID int) (string, error) {
+	// Get rules directory
 	rulesDir, err := web.AppConfig.String("WAFRulesDir")
 	if err != nil || rulesDir == "" {
-		// Default to a 'rules' directory in the application root
 		rulesDir = "rules"
 	}
 
-	// Make sure rules directory exists
-	if _, err := os.Stat(rulesDir); os.IsNotExist(err) {
-		logs.Warning("WAF rules directory %s does not exist, creating it", rulesDir)
-		if err := os.MkdirAll(rulesDir, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create rules directory: %v", err)
-		}
+	// Create site-specific directory if it doesn't exist
+	siteDir := filepath.Join(rulesDir, fmt.Sprintf("site_%d", siteID))
+	if err := os.MkdirAll(siteDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create site directory: %v", err)
 	}
 
-	// Create default configuration file if it doesn't exist
-	configFile := filepath.Join(rulesDir, "coraza.conf")
-	if _, err := os.Stat(configFile); os.IsNotExist(err) {
-		logs.Info("Creating default Coraza configuration file at %s", configFile)
-		err = os.WriteFile(configFile, []byte(`# Default Coraza WAF configuration
-SecRuleEngine On
-SecRequestBodyAccess On
-SecResponseBodyAccess On
-SecRequestBodyLimit 10485760
-SecRequestBodyNoFilesLimit 131072
-SecResponseBodyLimit 10485760
-SecResponseBodyMimeType text/plain text/html text/xml application/json
-SecDefaultAction "phase:1,log,auditlog,deny,status:403"
-SecCollectionTimeout 600
+	// Get active rules for this site
+	rules, err := models.GetActiveWAFRules(siteID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get active rules: %v", err)
+	}
 
-# Basic rules
-SecRule REQUEST_URI "@contains /admin" "id:1000,phase:1,deny,log,msg:'Admin access attempt'"
-SecRule REQUEST_HEADERS:User-Agent "@contains sqlmap" "id:1001,phase:1,deny,log,msg:'SQL injection tool detected'"
-SecRule ARGS "@rx (<script>|SELECT.+FROM|INSERT.+INTO)" "id:1002,phase:2,deny,log,msg:'Potential XSS or SQL injection'"
+	// Generate rules file content
+	content := fmt.Sprintf("# Custom WAF rules for site %d\n", siteID)
+	content += "# Generated at " + time.Now().Format(time.RFC3339) + "\n\n"
 
-# Uncomment below to include CRS rules if available
-# Include @pm crs-setup.conf
-# Include @pm coreruleset/*.conf
-`), 0644)
+	for _, rule := range rules {
+		ruleText, err := ruleGenerator.GenerateRule(rule)
 		if err != nil {
-			logs.Warning("Failed to create default Coraza config: %v", err)
+			logs.Warning("Failed to generate rule %d: %v", rule.ID, err)
+			continue
 		}
+
+		content += fmt.Sprintf("# Rule ID: %d - %s\n", rule.ID, rule.Name)
+		content += ruleText + "\n\n"
 	}
 
+	// Write rules to file
+	rulesFile := filepath.Join(siteDir, "custom_rules.conf")
+	if err := os.WriteFile(rulesFile, []byte(content), 0644); err != nil {
+		return "", fmt.Errorf("failed to write rules file: %v", err)
+	}
+
+	// Update rule version
+	ruleMutex.Lock()
+	ruleVersions[siteID] = time.Now().UnixNano()
+	ruleMutex.Unlock()
+
+	return rulesFile, nil
+}
+
+// LoadRulesWithCustomRules loads all rules including custom rules for a site
+func (wm *WAFManager) LoadRulesWithCustomRules(siteID int) (coraza.WAF, error) {
+	// Try to get rules directory from config
+	rulesDir, err := web.AppConfig.String("WAFRulesDir")
+	if err != nil || rulesDir == "" {
+		rulesDir = "rules"
+	}
+
+	// Generate custom rules file
+	customRulesFile, err := wm.GenerateCustomRulesFile(siteID)
+	if err != nil {
+		logs.Warning("Failed to generate custom rules: %v", err)
+		// Continue without custom rules
+	}
+
+	// Create WAF configuration
 	cfg := coraza.NewWAFConfig().
-		WithDirectivesFromFile(filepath.Join(rulesDir, "coraza.conf")).
-		WithDirectivesFromFile(filepath.Join(rulesDir, "coreruleset", "crs-setup.conf.example")).
+		WithDirectivesFromFile(filepath.Join(rulesDir, "coraza.conf"))
+
+	// Add custom rules if available
+	if customRulesFile != "" {
+		cfg = cfg.WithDirectivesFromFile(customRulesFile)
+	}
+
+	// Add CRS rules
+	cfg = cfg.WithDirectivesFromFile(filepath.Join(rulesDir, "coreruleset", "crs-setup.conf.example")).
 		WithDirectivesFromFile(filepath.Join(rulesDir, "coreruleset", "rules", "*.conf"))
 
+	// Create WAF instance
 	waf, err := coraza.NewWAF(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create WAF instance: %v", err)
@@ -91,28 +134,68 @@ SecRule ARGS "@rx (<script>|SELECT.+FROM|INSERT.+INTO)" "id:1002,phase:2,deny,lo
 	return waf, nil
 }
 
+// RulesNeedReload checks if rules for a site need to be reloaded
+func (wm *WAFManager) RulesNeedReload(siteID int) bool {
+	ruleMutex.RLock()
+	currentVersion, exists := ruleVersions[siteID]
+	ruleMutex.RUnlock()
+
+	if !exists {
+		return true
+	}
+
+	// Check if any rules have been updated since the last version
+	o := orm.NewOrm()
+	count, err := o.QueryTable(new(models.WAFRule)).
+		Filter("site_id", siteID).
+		Filter("updated_at__gt", time.Unix(0, currentVersion)).
+		Count()
+
+	if err != nil {
+		logs.Warning("Failed to check for rule updates: %v", err)
+		return true
+	}
+
+	return count > 0
+}
+
+// ReloadWAF reloads the WAF instance for a site
+func (wm *WAFManager) ReloadWAF(siteID int) error {
+	wm.mutex.Lock()
+	defer wm.mutex.Unlock()
+
+	// Remove the current WAF instance
+	delete(wm.wafInstances, siteID)
+
+	logs.Info("WAF instance for site %d removed, will be reloaded on next request", siteID)
+	return nil
+}
+
 // GetWAF gets or creates a WAF instance for a site
 func (wm *WAFManager) GetWAF(siteID int) (coraza.WAF, error) {
 	wm.mutex.RLock()
 	waf, exists := wm.wafInstances[siteID]
 	wm.mutex.RUnlock()
 
-	if exists {
-		return waf, nil
+	// Check if we need to reload the rules
+	needsReload := !exists || wm.RulesNeedReload(siteID)
+
+	if needsReload {
+		// Create a new WAF instance with custom rules
+		newWaf, err := wm.LoadRulesWithCustomRules(siteID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create WAF instance: %v", err)
+		}
+
+		// Store the new WAF instance
+		wm.mutex.Lock()
+		wm.wafInstances[siteID] = newWaf
+		wm.mutex.Unlock()
+
+		logs.Info("Created new WAF instance with custom rules for site ID %d", siteID)
+		return newWaf, nil
 	}
 
-	// Create a new WAF instance
-	waf, err := wm.loadRules()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create WAF instance: %v", err)
-	}
-
-	// Store the WAF instance
-	wm.mutex.Lock()
-	wm.wafInstances[siteID] = waf
-	wm.mutex.Unlock()
-
-	logs.Info("Created new WAF instance for site ID %d", siteID)
 	return waf, nil
 }
 
@@ -306,4 +389,18 @@ func (rww *responseWriterWrapper) WriteHeader(statusCode int) {
 func (rww *responseWriterWrapper) Write(b []byte) (int, error) {
 	rww.body = append(rww.body, b...)
 	return len(b), nil
+}
+
+var (
+	wafManagerInstance *WAFManager
+	wafManagerOnce     sync.Once
+	wafManagerErr      error
+)
+
+// GetWAFManager returns the singleton WAF manager instance
+func GetWAFManager() (*WAFManager, error) {
+	wafManagerOnce.Do(func() {
+		wafManagerInstance, wafManagerErr = NewWAFManager()
+	})
+	return wafManagerInstance, wafManagerErr
 }

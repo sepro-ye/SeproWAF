@@ -27,6 +27,11 @@ func init() {
 	web.Router("/waf/certificates", &controllers.UIController{}, "get:CertificateList")
 	web.Router("/waf/certificates/upload", &controllers.UIController{}, "get:CertificateUpload")
 
+	// UI Routes for WAF Rule Management
+	web.Router("/waf/sites/:id/rules", &controllers.UIController{}, "get:WAFRuleList")
+	web.Router("/waf/sites/:id/rules/new", &controllers.UIController{}, "get:WAFRuleCreate")
+	web.Router("/waf/sites/:id/rules/:ruleId/edit", &controllers.UIController{}, "get:WAFRuleEdit")
+
 	// API Routes
 	// Public API routes
 	web.Router("/api/auth/register", &controllers.AuthController{}, "post:Register")
@@ -50,6 +55,13 @@ func init() {
 	// API Routes for Certificate Management
 	web.Router("/api/certificates", &controllers.CertificateController{}, "get:ListCertificates;post:UploadCertificate")
 	web.Router("/api/certificates/:id", &controllers.CertificateController{}, "get:GetCertificate;delete:DeleteCertificate")
+
+	// API Routes for WAF Rule Management
+	web.Router("/api/sites/:siteId/waf/rules", &controllers.WAFRuleController{}, "get:GetRules;post:CreateRule")
+	web.Router("/api/waf/rules/:id", &controllers.WAFRuleController{}, "get:GetRule;put:UpdateRule;delete:DeleteRule")
+	web.Router("/api/waf/rules/:id/toggle", &controllers.WAFRuleController{}, "post:ToggleRuleStatus")
+	web.Router("/api/waf/templates", &controllers.WAFRuleController{}, "get:GetRuleTemplates")
+	web.Router("/api/waf/test-rule", &controllers.WAFRuleController{}, "post:TestRule")
 
 	// Admin-only API routes
 	web.Router("/api/users", &controllers.UserController{}, "get:GetUsers")

@@ -116,57 +116,31 @@ func (c *UIController) SiteList() {
 
 // SiteDetail renders the site detail page
 func (c *UIController) SiteDetail() {
-	// Get authenticated user
-	user := c.GetUserFromJWT()
-	if user == nil {
-		c.Redirect("/auth/login", 302)
-		return
-	}
-
 	// Get site ID from URL parameter
-	siteID, err := strconv.Atoi(c.Ctx.Input.Param(":id"))
+	siteIDStr := c.Ctx.Input.Param(":id")
+	siteID, err := strconv.Atoi(siteIDStr)
 	if err != nil {
-		c.Abort("400")
+		c.CustomAbort(400, "Invalid site ID")
 		return
 	}
 
-	// Get the site
-	o := orm.NewOrm()
-	site := &models.Site{ID: siteID}
-	err = o.Read(site)
+	// Get site from database
+	site, err := models.GetSiteByID(siteID)
 	if err != nil {
-		c.Abort("404")
+		c.CustomAbort(404, "Site not found")
 		return
 	}
 
-	// Check if user has permission to view the site
-	if !site.CanUserManageSite(user.ID, user.Role) {
-		c.Redirect("/dashboard", 302)
-		return
-	}
+	// Check if user has permission to view this site
+	// Your existing permission check code here...
 
-	// Get proxy ports from configuration
-	proxyPort, err := web.AppConfig.Int("ProxyPort")
-	if err != nil {
-		proxyPort = 8080 // Default fallback value
-	}
+	// Get the active tab from query parameter, default to "overview"
+	activeTab := c.GetString("tab", "overview")
 
-	httpsPort, err := web.AppConfig.Int("ProxyHTTPSPort")
-	if err != nil {
-		httpsPort = 8443 // Default fallback value
-	}
-
-	// Determine if SSL is enabled (don't try to load the certificate)
-	hasValidCertificate := site.CertificateID != nil
-
-	c.Data["Title"] = site.Name + " - Site Details"
-	c.Data["Username"] = user.Username
-	c.Data["IsAuthenticated"] = true
-	c.Data["IsAdmin"] = user.IsAdmin()
+	// Add data to template
+	c.Data["PageTitle"] = site.Name
 	c.Data["Site"] = site
-	c.Data["HasValidCertificate"] = hasValidCertificate
-	c.Data["ProxyPort"] = proxyPort
-	c.Data["ProxyHTTPSPort"] = httpsPort
+	c.Data["ActiveTab"] = activeTab // Set the active tab
 	c.Layout = "layout.tpl"
 	c.TplName = "site/detail.tpl"
 }
@@ -260,6 +234,103 @@ func (c *UIController) CertificateUpload() {
 	c.Data["IsAdmin"] = user.IsAdmin()
 	c.Layout = "layout.tpl"
 	c.TplName = "certificate/upload.tpl"
+}
+
+// WAFRuleList shows the WAF rules for a site
+func (c *UIController) WAFRuleList() {
+	// Get site ID from URL parameter
+	siteIDStr := c.Ctx.Input.Param(":id")
+	siteID, err := strconv.Atoi(siteIDStr)
+	if err != nil {
+		c.CustomAbort(400, "Invalid site ID")
+		return
+	}
+
+	// Get site information
+	site, err := models.GetSiteByID(siteID)
+	if err != nil {
+		c.CustomAbort(404, "Site not found")
+		return
+	}
+
+	c.Data["Site"] = site
+	c.Data["SiteID"] = siteID
+	c.Data["PageTitle"] = "WAF Rules - " + site.Domain
+	c.Layout = "layout.tpl"
+	c.TplName = "waf/rule_list.tpl"
+}
+
+// WAFRuleCreate shows the form to create a new WAF rule
+func (c *UIController) WAFRuleCreate() {
+	// Get site ID from URL parameter
+	siteIDStr := c.Ctx.Input.Param(":id")
+	siteID, err := strconv.Atoi(siteIDStr)
+	if err != nil {
+		c.CustomAbort(400, "Invalid site ID")
+		return
+	}
+
+	// Get site information
+	site, err := models.GetSiteByID(siteID)
+	if err != nil {
+		c.CustomAbort(404, "Site not found")
+		return
+	}
+
+	c.Data["Site"] = site
+	c.Data["SiteID"] = siteID
+	c.Data["IsEdit"] = false
+	c.Data["PageTitle"] = "Create WAF Rule - " + site.Domain
+	c.Layout = "layout.tpl"
+	c.TplName = "waf/rule_edit.tpl"
+}
+
+// WAFRuleEdit shows the form to edit an existing WAF rule
+func (c *UIController) WAFRuleEdit() {
+	// Get site ID and rule ID from URL parameters
+	siteIDStr := c.Ctx.Input.Param(":id")
+	ruleIDStr := c.Ctx.Input.Param(":ruleId")
+
+	siteID, err := strconv.Atoi(siteIDStr)
+	if err != nil {
+		c.CustomAbort(400, "Invalid site ID")
+		return
+	}
+
+	ruleID, err := strconv.Atoi(ruleIDStr)
+	if err != nil {
+		c.CustomAbort(400, "Invalid rule ID")
+		return
+	}
+
+	// Get site information
+	site, err := models.GetSiteByID(siteID)
+	if err != nil {
+		c.CustomAbort(404, "Site not found")
+		return
+	}
+
+	// Get rule information
+	rule, err := models.GetWAFRuleByID(ruleID)
+	if err != nil {
+		c.CustomAbort(404, "Rule not found")
+		return
+	}
+
+	// Verify that the rule belongs to the site
+	if rule.SiteID != siteID {
+		c.CustomAbort(403, "Rule does not belong to this site")
+		return
+	}
+
+	c.Data["Site"] = site
+	c.Data["SiteID"] = siteID
+	c.Data["Rule"] = rule
+	c.Data["RuleID"] = ruleID
+	c.Data["IsEdit"] = true
+	c.Data["PageTitle"] = "Edit WAF Rule - " + site.Domain
+	c.Layout = "layout.tpl"
+	c.TplName = "waf/rule_edit.tpl"
 }
 
 // Helper to get user from JWT token
