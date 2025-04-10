@@ -1,13 +1,14 @@
 module SeproWAF
 
-go 1.23.0
+go 1.24
 
-toolchain go1.23.8
+toolchain go1.24.2
 
 require github.com/beego/beego/v2 v2.3.7
 
 require (
 	github.com/corazawaf/coraza/v3 v3.3.3
+	github.com/exaring/ja4plus v0.0.1
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/smartystreets/goconvey v1.6.4

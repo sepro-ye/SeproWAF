@@ -290,7 +290,7 @@ func (ps *ProxyServer) LoadActiveSites() error {
 
 // MonitorSiteChanges periodically checks for changes in site configurations
 func (ps *ProxyServer) MonitorSiteChanges() {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -304,7 +304,7 @@ func (ps *ProxyServer) MonitorSiteChanges() {
 // MonitorCertificates checks for certificate changes and starts HTTPS when needed
 func (ps *ProxyServer) MonitorCertificates() {
 	httpsStarted := false
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
 	for {
