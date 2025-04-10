@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/beego/beego/v2/client/orm"
 	"github.com/beego/beego/v2/core/logs"
+	"github.com/exaring/ja4plus"
 )
 
 // ProxyServer represents the reverse proxy server
@@ -29,6 +31,7 @@ type ProxyServer struct {
 	defaultHost string
 	tlsConfig   *tls.Config
 	wafManager  *WAFManager // Added WAF manager
+
 }
 
 // SiteProxy represents a site's proxy configuration
@@ -45,6 +48,46 @@ type SiteProxy struct {
 type CertificateManager struct {
 	certificates map[string]*tls.Certificate
 	mutex        sync.RWMutex
+}
+
+// JA4Middleware extracts JA4 fingerprints from the TLS connection and adds them to the request headers.
+func JA4Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check if the request is over TLS
+		logs.Debug("JA4+ function running")
+		if r.TLS != nil {
+			// Assuming you have a way to extract ClientHelloInfo
+			clientHelloInfo := extractClientHelloInfo(r.TLS) // Extract ClientHelloInfo
+			logs.Debug("JA4+")
+			// Compute JA4 hash from the client hello info
+			ja4Hash := ja4plus.JA4(clientHelloInfo)
+
+			if ja4Hash != "" {
+				// Add JA4 header to the request
+				r.Header.Set("X-JA4", ja4Hash)
+				logs.Debug("JA4+ computed")
+			} else {
+				log.Printf("Error computing JA4 hash")
+			}
+		}
+		// Pass the request to the next handler in the chain
+		next.ServeHTTP(w, r)
+	})
+}
+
+// extractClientHelloInfo intercepts the ClientHello information during the handshake
+func extractClientHelloInfo(connState *tls.ConnectionState) *tls.ClientHelloInfo {
+	// In a real implementation, you'd need to hook into the handshake process
+	// and capture the ClientHelloInfo. This is a simplified approach.
+
+	// Example logic for creating a mock ClientHelloInfo (you'll need to capture real info)
+	clientHelloInfo := &tls.ClientHelloInfo{
+		SupportedVersions: []uint16{tls.VersionTLS13, tls.VersionTLS12},
+		CipherSuites:      []uint16{tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384},
+		// Add other fields as needed (SNI, ALPN, etc.)
+	}
+
+	return clientHelloInfo
 }
 
 // NewCertificateManager creates a new certificate manager
@@ -247,37 +290,43 @@ func (ps *ProxyServer) LoadActiveSites() error {
 
 // MonitorSiteChanges periodically checks for changes in site configurations
 func (ps *ProxyServer) MonitorSiteChanges() {
-	ticker := time.NewTicker(60 * time.Second)
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		ps.LoadActiveSites() // Refresh the site list
+	for {
+		select {
+		case <-ticker.C:
+			ps.LoadActiveSites() // Refresh the site list
+		}
 	}
 }
 
 // MonitorCertificates checks for certificate changes and starts HTTPS when needed
 func (ps *ProxyServer) MonitorCertificates() {
 	httpsStarted := false
-	ticker := time.NewTicker(60 * time.Second)
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		if !httpsStarted {
-			// Check if we have certificates now
-			ps.certManager.mutex.RLock()
-			hasCertificates := len(ps.certManager.certificates) > 0
-			ps.certManager.mutex.RUnlock()
+	for {
+		select {
+		case <-ticker.C:
+			if !httpsStarted {
+				// Check if we have certificates now
+				ps.certManager.mutex.RLock()
+				hasCertificates := len(ps.certManager.certificates) > 0
+				ps.certManager.mutex.RUnlock()
 
-			if hasCertificates {
-				// Start HTTPS server
-				go func() {
-					logs.Info("Certificates available - starting HTTPS proxy server on port %d", ps.httpsPort)
-					if err := ps.httpsServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-						logs.Error("HTTPS server error: %v", err)
-						logs.Warning("HTTPS server failed to start. SSL functionality will be unavailable.")
-					}
-				}()
-				httpsStarted = true
+				if hasCertificates {
+					// Start HTTPS server
+					go func() {
+						logs.Info("Certificates available - starting HTTPS proxy server on port %d", ps.httpsPort)
+						if err := ps.httpsServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+							logs.Error("HTTPS server error: %v", err)
+							logs.Warning("HTTPS server failed to start. SSL functionality will be unavailable.")
+						}
+					}()
+					httpsStarted = true
+				}
 			}
 		}
 	}
@@ -340,9 +389,19 @@ func (ps *ProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}(siteProxy.Site.ID)
 
 	// Apply WAF if enabled for this site and WAF manager is available
+	// if siteProxy.WAFEnabled && ps.wafManager != nil {
+	// 	wafHandler := ps.wafManager.WAFHandler(siteProxy.ReverseProxy, siteProxy.Site.ID, siteProxy.Site.Domain)
+	// 	wafHandler.ServeHTTP(w, r)
+	// 	return
+	// }
+
+	// Apply WAF if enabled for this site and WAF manager is available
 	if siteProxy.WAFEnabled && ps.wafManager != nil {
 		wafHandler := ps.wafManager.WAFHandler(siteProxy.ReverseProxy, siteProxy.Site.ID, siteProxy.Site.Domain)
-		wafHandler.ServeHTTP(w, r)
+
+		// لف WAF handler مع JA4+ middleware
+		ja4plusWrapped := JA4Middleware(wafHandler)
+		ja4plusWrapped.ServeHTTP(w, r)
 		return
 	}
 
