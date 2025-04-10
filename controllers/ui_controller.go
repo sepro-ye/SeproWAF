@@ -134,6 +134,8 @@ func (c *UIController) SiteDetail() {
 	// Check if user has permission to view this site
 	// Your existing permission check code here...
 
+	ProxyPort, _ := web.AppConfig.String("ProxyPort")
+
 	// Get the active tab from query parameter, default to "overview"
 	activeTab := c.GetString("tab", "overview")
 
@@ -141,6 +143,7 @@ func (c *UIController) SiteDetail() {
 	c.Data["PageTitle"] = site.Name
 	c.Data["Site"] = site
 	c.Data["ActiveTab"] = activeTab // Set the active tab
+	c.Data["ProxyPort"] = ProxyPort
 	c.Layout = "layout.tpl"
 	c.TplName = "site/detail.tpl"
 }
@@ -503,4 +506,52 @@ func (c *UIController) GetUserFromToken(tokenString string) *models.User {
 	}
 
 	return &user
+}
+
+// DisplaySettings renders the settings page with current settings data
+func (c *UIController) DisplaySettings() {
+	// Fetch settings from the database or configuration
+	settings := models.Settings{
+		General: models.GeneralSettings{
+			SiteName: "SeproWAF",
+			Language: "en",
+			Theme:    "default",
+			RunMode:  "production",
+		},
+		Profile: models.ProfileSettings{
+			FullName:       "Admin User",
+			Username:       "admin",
+			Email:          "admin@example.com",
+			ProfilePicture: "/static/images/default-profile.png",
+			Bio:            "Administrator of SeproWAF",
+		},
+	}
+
+	// Pass settings to the template
+	c.Data["Settings"] = settings
+	c.Data["Title"] = "Settings"
+	c.Layout = "layout.tpl"
+	c.TplName = "settings/settings.tpl"
+}
+
+// UpdateSettings handles the form submission to update settings
+func (c *UIController) UpdateSettings() {
+	// Parse form data
+	var updatedSettings models.Settings
+	if err := c.ParseForm(&updatedSettings); err != nil {
+		c.CustomAbort(400, "Invalid form data")
+		return
+	}
+
+	// Save updated settings to the database or configuration
+	// Example: SaveSettingsToDB(updatedSettings)
+
+	// Redirect back to the settings page
+	c.Redirect("/settings", 302)
+}
+
+func (c *UIController) Settings() {
+
+	c.Layout = "layout.tpl"
+	c.TplName = "settings/settings.tpl"
 }

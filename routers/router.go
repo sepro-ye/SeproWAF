@@ -31,8 +31,7 @@ func init() {
 	web.Router("/waf/sites/:id/rules", &controllers.UIController{}, "get:WAFRuleList")
 	web.Router("/waf/sites/:id/rules/new", &controllers.UIController{}, "get:WAFRuleCreate")
 	web.Router("/waf/sites/:id/rules/:ruleId/edit", &controllers.UIController{}, "get:WAFRuleEdit")
-
-	// UI Routes for WAF Logs
+	web.Router("/settings", &controllers.UIController{}, "get:Settings")
 	web.Router("/waf/logs", &controllers.UIController{}, "get:WAFLogsList")
 	web.Router("/waf/logs/:id", &controllers.UIController{}, "get:WAFLogDetail")
 
