@@ -32,6 +32,8 @@ func init() {
 	web.Router("/waf/sites/:id/rules/new", &controllers.UIController{}, "get:WAFRuleCreate")
 	web.Router("/waf/sites/:id/rules/:ruleId/edit", &controllers.UIController{}, "get:WAFRuleEdit")
 
+	web.Router("/settings", &controllers.UIController{}, "get:Settings")
+
 	// API Routes
 	// Public API routes
 	web.Router("/api/auth/register", &controllers.AuthController{}, "post:Register")
