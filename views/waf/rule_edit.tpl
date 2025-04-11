@@ -670,7 +670,6 @@ SecRule IP:login_counter "@gt 5" "id:10004,phase:1,deny,status:429,log,msg:'Logi
             
             let url = isEdit ? `/api/waf/rules/${ruleData.id}` : `/api/sites/${ruleData.siteId}/waf/rules`;
             let method = isEdit ? 'put' : 'post';
-            console.log(ruleData);
             const response = await axios({
                 method: method,
                 url: url,

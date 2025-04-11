@@ -31,6 +31,9 @@ func init() {
 	web.Router("/waf/sites/:id/rules", &controllers.UIController{}, "get:WAFRuleList")
 	web.Router("/waf/sites/:id/rules/new", &controllers.UIController{}, "get:WAFRuleCreate")
 	web.Router("/waf/sites/:id/rules/:ruleId/edit", &controllers.UIController{}, "get:WAFRuleEdit")
+	web.Router("/settings", &controllers.UIController{}, "get:Settings")
+	web.Router("/waf/logs", &controllers.UIController{}, "get:WAFLogsList")
+	web.Router("/waf/logs/:id", &controllers.UIController{}, "get:WAFLogDetail")
 
 	// API Routes
 	// Public API routes
@@ -62,6 +65,10 @@ func init() {
 	web.Router("/api/waf/rules/:id/toggle", &controllers.WAFRuleController{}, "post:ToggleRuleStatus")
 	web.Router("/api/waf/templates", &controllers.WAFRuleController{}, "get:GetRuleTemplates")
 	web.Router("/api/waf/test-rule", &controllers.WAFRuleController{}, "post:TestRule")
+
+	// WAF logs routes
+	web.Router("/api/waf/logs", &controllers.WAFLogsController{}, "get:GetLogs")
+	web.Router("/api/waf/logs/:id", &controllers.WAFLogsController{}, "get:GetLogDetails")
 
 	// Admin-only API routes
 	web.Router("/api/users", &controllers.UserController{}, "get:GetUsers")

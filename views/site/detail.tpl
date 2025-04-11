@@ -570,7 +570,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Update charts based on period
                 // In a real app, you'd fetch new data here
-                console.log(`Updating charts with period: ${period}`);
             }
         });
     });

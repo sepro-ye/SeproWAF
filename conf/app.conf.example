@@ -18,3 +18,8 @@ ProxyHTTPSPort = 8443
 # WAF configuration
 WAFRulesDir = rules/
 WAFLogDir = logs/waf
+
+# WAF logging settings
+WAFLogBufferSize = 100
+WAFLogDetails = true
+WAFLogRetention = 30
