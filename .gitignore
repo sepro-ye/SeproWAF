@@ -1,3 +1,4 @@
 conf/app.conf
 conf/*.conf
 SeproWAF
+SeproWAF.exe
