@@ -281,22 +281,35 @@ func (c *WAFLogsController) GetSiteLogs() {
 	// Calculate pagination info
 	totalPages := (total + int64(pageSize) - 1) / int64(pageSize)
 
-	// Get attack and request counts for the site in the last 24 hours
+	// Get attack and request counts for the site
 	o := orm.NewOrm()
 	oneDayAgo := time.Now().Add(-24 * time.Hour)
 
-	// Requests count in last 24h for this site - use "SiteID" (capitalized)
-	var requestsCount int64
-	requestsCount, _ = o.QueryTable(new(models.WAFLog)).
+	// Requests count in last 24h for this site
+	var requestsCount24h int64
+	requestsCount24h, _ = o.QueryTable(new(models.WAFLog)).
 		Filter("SiteID", siteID).
 		Filter("created_at__gte", oneDayAgo).
 		Count()
 
-	// Attacks count in last 24h for this site - use "SiteID" (capitalized)
-	var attacksCount int64
-	attacksCount, _ = o.QueryTable(new(models.WAFLog)).
+	// Attacks count in last 24h for this site
+	var attacksCount24h int64
+	attacksCount24h, _ = o.QueryTable(new(models.WAFLog)).
 		Filter("SiteID", siteID).
 		Filter("created_at__gte", oneDayAgo).
+		Filter("action", "blocked").
+		Count()
+
+	// Total requests count (all time) for this site
+	var requestsCountAll int64
+	requestsCountAll, _ = o.QueryTable(new(models.WAFLog)).
+		Filter("SiteID", siteID).
+		Count()
+
+	// Total attacks count (all time) for this site
+	var attacksCountAll int64
+	attacksCountAll, _ = o.QueryTable(new(models.WAFLog)).
+		Filter("SiteID", siteID).
 		Filter("action", "blocked").
 		Count()
 
@@ -311,8 +324,10 @@ func (c *WAFLogsController) GetSiteLogs() {
 		},
 		"site_id": siteID,
 		"stats": map[string]interface{}{
-			"requests_24h": requestsCount,
-			"attacks_24h":  attacksCount,
+			"requests_24h": requestsCount24h,
+			"attacks_24h":  attacksCount24h,
+			"requests_all": requestsCountAll,
+			"attacks_all":  attacksCountAll,
 		},
 	}
 	c.ServeJSON()

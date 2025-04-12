@@ -128,7 +128,7 @@ async function loadSites() {
 }
 
 // Render sites table
-function renderSites(sites) {
+async function renderSites(sites) {
     const tbody = document.getElementById('sites-tbody');
     const loading = document.getElementById('sites-loading');
     const empty = document.getElementById('sites-empty');
@@ -147,12 +147,14 @@ function renderSites(sites) {
     
     tbody.innerHTML = '';
     
+    // First render all sites with placeholder for stats
     sites.forEach(site => {
         const row = document.createElement('tr');
         row.className = 'hover:bg-gray-50';
+        row.setAttribute('data-site-id', site.ID);
         
         let statusClass;
-        switch (site.status) {
+        switch (site.Status ? site.Status.toLowerCase() : '') {
             case 'active': 
                 statusClass = 'bg-green-500'; 
                 break;
@@ -172,11 +174,15 @@ function renderSites(sites) {
             <td class="px-4 py-2">${site.Domain}</td>
             <td class="px-4 py-2">
                 <span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass} text-white">
-                    ${site.Status}
+                    ${site.Status || 'Unknown'}
                 </span>
             </td>
-            <td class="px-4 py-2">${site.RequestCount || '0'}</td>
-            <td class="px-4 py-2">${site.BlockedCount || '0'}</td>
+            <td class="px-4 py-2 requests-count">
+                <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" role="status"></span>
+            </td>
+            <td class="px-4 py-2 attacks-count">
+                <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" role="status"></span>
+            </td>
             <td class="px-4 py-2">
                 <div class="inline-flex rounded-md shadow-sm">
                     <a href="/waf/sites/${site.ID}" class="px-2 py-1 text-sm border border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white rounded-l-md" title="View">
@@ -195,6 +201,50 @@ function renderSites(sites) {
         
         tbody.appendChild(row);
     });
+    
+    // Then fetch stats for each site
+    for (const site of sites) {
+        try {
+            const response = await api.get(`/sites/${site.ID}/logs`, {
+                params: {
+                    page: 1,
+                    page_size: 1
+                }
+            });
+            
+            const row = tbody.querySelector(`tr[data-site-id="${site.ID}"]`);
+            if (!row) continue;
+            
+            const requestsCell = row.querySelector('.requests-count');
+            const attacksCell = row.querySelector('.attacks-count');
+            
+            if (response.data && response.data.success && response.data.stats) {
+                // Use 24h stats for the list view
+                const requests = response.data.stats.requests_24h || 0;
+                const attacks = response.data.stats.attacks_24h || 0;
+                
+                // Update cells with real data
+                if (requestsCell) requestsCell.textContent = requests;
+                if (attacksCell) attacksCell.textContent = attacks;
+            } else {
+                // Fallback to site's stored counts if API doesn't return stats
+                if (requestsCell) requestsCell.textContent = site.RequestCount || '0';
+                if (attacksCell) attacksCell.textContent = site.BlockedCount || '0';
+            }
+        } catch (error) {
+            console.error(`Error fetching stats for site ${site.ID}:`, error);
+            
+            // Find the row and update with fallback values on error
+            const row = tbody.querySelector(`tr[data-site-id="${site.ID}"]`);
+            if (row) {
+                const requestsCell = row.querySelector('.requests-count');
+                const attacksCell = row.querySelector('.attacks-count');
+                
+                if (requestsCell) requestsCell.textContent = site.RequestCount || '0';
+                if (attacksCell) attacksCell.textContent = site.BlockedCount || '0';
+            }
+        }
+    }
 }
 
 // Delete a site

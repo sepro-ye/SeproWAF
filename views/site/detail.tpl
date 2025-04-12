@@ -96,10 +96,10 @@
                             <dd class="col-span-2" id="created-date">Loading...</dd>
                             
                             <dt class="col-span-1 font-medium">Total Requests:</dt>
-                            <dd class="col-span-2">{{.Site.RequestCount}}</dd>
+                            <dd class="col-span-2" id="total-requests">{{.Site.RequestCount}}</dd>
                             
                             <dt class="col-span-1 font-medium">Blocked Requests:</dt>
-                            <dd class="col-span-2">{{.Site.BlockedCount}}</dd>
+                            <dd class="col-span-2" id="blocked-requests">{{.Site.BlockedCount}}</dd>
                             
                             <dt class="col-span-1 font-medium">Block Rate:</dt>
                             <dd class="col-span-2" id="block-rate">Calculating...</dd>
@@ -149,39 +149,6 @@
                 </div>
                 <p>Activate the site using the toggle button above to enable proxy functionality.</p>
                 {{end}}
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="flex flex-wrap mb-4">
-    <div class="w-full md:w-1/2">
-        <div class="bg-white rounded-lg shadow">
-            <div class="px-4 py-3 border-b flex justify-between items-center">
-                <h5 class="text-lg font-medium mb-0">Traffic Overview</h5>
-                <div class="inline-flex rounded-md shadow-sm">
-                    <button type="button" class="px-2 py-1 text-sm font-medium border border-gray-400 text-gray-700 bg-gray-100 rounded-l-md active" data-period="24h">24h</button>
-                    <button type="button" class="px-2 py-1 text-sm font-medium border-t border-b border-gray-400 text-gray-700 bg-white hover:bg-gray-100" data-period="7d">7d</button>
-                    <button type="button" class="px-2 py-1 text-sm font-medium border border-gray-400 text-gray-700 bg-white hover:bg-gray-100 rounded-r-md" data-period="30d">30d</button>
-                </div>
-            </div>
-            <div class="p-4">
-                <canvas id="trafficChart" height="250"></canvas>
-            </div>
-        </div>
-    </div>
-    <div class="w-full md:w-1/2">
-        <div class="bg-white rounded-lg shadow">
-            <div class="px-4 py-3 border-b flex justify-between items-center">
-                <h5 class="text-lg font-medium mb-0">Attack Types</h5>
-                <div class="inline-flex rounded-md shadow-sm">
-                    <button type="button" class="px-2 py-1 text-sm font-medium border border-gray-400 text-gray-700 bg-gray-100 rounded-l-md active" data-period="24h">24h</button>
-                    <button type="button" class="px-2 py-1 text-sm font-medium border-t border-b border-gray-400 text-gray-700 bg-white hover:bg-gray-100" data-period="7d">7d</button>
-                    <button type="button" class="px-2 py-1 text-sm font-medium border border-gray-400 text-gray-700 bg-white hover:bg-gray-100 rounded-r-md" data-period="30d">30d</button>
-                </div>
-            </div>
-            <div class="p-4">
-                <canvas id="attackTypesChart" height="250"></canvas>
             </div>
         </div>
     </div>
@@ -329,13 +296,12 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const siteId = {{.Site.ID}};
     
     // Format created date
-    const createdDate = new Date('{{.Site.CreatedAt}}');
+    const createdDate = {{.Site.CreatedAt}};
     document.getElementById('created-date').textContent = createdDate.toLocaleString();
     
     // Calculate block rate
@@ -425,154 +391,106 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Load site statistics and charts
     loadSiteStats();
-    renderTrafficChart();
-    renderAttackTypesChart();
     loadRecentAttacks();
     
     // Load site stats
     async function loadSiteStats() {
         try {
-            const response = await api.get(`/sites/${siteId}/stats`);
-            // Update stats if needed
+            // Get site stats using our new logs API
+            const response = await api.get(`/sites/${siteId}/logs`, {
+                params: {
+                    page: 1,
+                    page_size: 1 // We only need the stats
+                }
+            });
+            
+            
+            if (response.data && response.data.success && response.data.stats) {
+                const { requests_24h, attacks_24h, requests_all, attacks_all } = response.data.stats;
+                
+                // Use direct getElementById instead of complex selectors
+                const totalRequestsEl = document.getElementById('total-requests');
+                const blockedRequestsEl = document.getElementById('blocked-requests');
+                const blockRateEl = document.getElementById('block-rate');
+                
+                // Check if elements exist before updating
+                if (totalRequestsEl) {
+                    totalRequestsEl.textContent = requests_all || 0;
+                }
+                
+                if (blockedRequestsEl) {
+                    blockedRequestsEl.textContent = attacks_all || 0;
+                }
+                
+                // Calculate and update block rate
+                let blockRate = 0;
+                if (requests_all > 0) {
+                    blockRate = (attacks_all / requests_all * 100).toFixed(2);
+                }
+                
+                if (blockRateEl) {
+                    blockRateEl.textContent = blockRate + '%';
+                }
+            } else {
+                console.warn("No stats data available in API response");
+            }
         } catch (error) {
             console.error('Error loading site stats:', error);
         }
     }
     
-    // Traffic chart
-    function renderTrafficChart() {
-        const ctx = document.getElementById('trafficChart').getContext('2d');
-        
-        // Sample data - in a real app, this would come from an API
-        const data = {
-            labels: ['00:00', '03:00', '06:00', '09:00', '12:00', '15:00', '18:00', '21:00'],
-            datasets: [
-                {
-                    label: 'Total Requests',
-                    data: [65, 59, 80, 81, 56, 55, 40, 88],
-                    borderColor: '#3498db',
-                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.4
-                },
-                {
-                    label: 'Blocked Requests',
-                    data: [12, 19, 3, 5, 2, 3, 20, 33],
-                    borderColor: '#e74c3c',
-                    backgroundColor: 'rgba(231, 76, 60, 0.1)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.4
-                }
-            ]
-        };
-        
-        new Chart(ctx, {
-            type: 'line',
-            data: data,
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
-                }
-            }
-        });
-    }
-    
-    // Attack types chart
-    function renderAttackTypesChart() {
-        const ctx = document.getElementById('attackTypesChart').getContext('2d');
-        
-        // Sample data - in a real app, this would come from an API
-        const data = {
-            labels: ['SQL Injection', 'XSS', 'CSRF', 'Path Traversal', 'Other'],
-            datasets: [{
-                data: [45, 25, 12, 8, 10],
-                backgroundColor: [
-                    '#e74c3c',
-                    '#f39c12',
-                    '#2ecc71',
-                    '#3498db',
-                    '#9b59b6'
-                ],
-                borderWidth: 1
-            }]
-        };
-        
-        new Chart(ctx, {
-            type: 'doughnut',
-            data: data,
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'right'
-                    }
-                }
-            }
-        });
-    }
-    
-    // Load recent attacks
-    function loadRecentAttacks() {
-        // Sample data - in a real app, this would come from an API
-        const attacks = [
-            { time: '2025-04-07 12:34:56', ip: '192.168.1.100', type: 'SQL Injection', rule: '942100', path: '/login.php' },
-            { time: '2025-04-07 12:30:22', ip: '192.168.1.101', type: 'XSS', rule: '941110', path: '/contact.php' },
-            { time: '2025-04-07 12:28:15', ip: '192.168.1.102', type: 'Path Traversal', rule: '930110', path: '/download.php' },
-            { time: '2025-04-07 12:25:44', ip: '192.168.1.103', type: 'SQL Injection', rule: '942190', path: '/search.php' },
-            { time: '2025-04-07 12:22:10', ip: '192.168.1.104', type: 'XSS', rule: '941120', path: '/comment.php' }
-        ];
-        
+    // Load recent attacks - replace sample data with real attacks from logs
+    async function loadRecentAttacks() {
         const tbody = document.getElementById('recent-attacks');
-        tbody.innerHTML = '';
+        tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-2 text-center">Loading recent attacks...</td></tr>';
         
-        if (attacks.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-2 text-center">No recent attacks detected</td></tr>';
-            return;
+        try {
+            // Get site logs filtered to show only blocked requests (attacks)
+            const response = await api.get(`/sites/${siteId}/logs`, {
+                params: {
+                    page: 1,
+                    page_size: 5,
+                    action: 'blocked'
+                }
+            });
+            
+            const attacks = response.data?.data || [];
+            
+            tbody.innerHTML = '';
+            
+            if (attacks.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-2 text-center">No recent attacks detected</td></tr>';
+                return;
+            }
+            
+            attacks.forEach(attack => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-gray-50';
+                tr.innerHTML = `
+                    <td class="px-4 py-2">${formatDate(attack.CreatedAt)}</td>
+                    <td class="px-4 py-2">${attack.ClientIP}</td>
+                    <td class="px-4 py-2">
+                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-red-500 text-white">
+                            ${attack.Category || 'Unknown'}
+                        </span>
+                    </td>
+                    <td class="px-4 py-2">${attack.RuleID || '-'}</td>
+                    <td class="px-4 py-2">${attack.URI}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } catch (error) {
+            console.error('Error loading recent attacks:', error);
+            tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-2 text-center text-red-500">Failed to load recent attacks</td></tr>';
         }
-        
-        attacks.forEach(attack => {
-            const tr = document.createElement('tr');
-            tr.className = 'hover:bg-gray-50';
-            tr.innerHTML = `
-                <td class="px-4 py-2">${attack.time}</td>
-                <td class="px-4 py-2">${attack.ip}</td>
-                <td class="px-4 py-2"><span class="px-2 py-1 text-xs font-medium rounded-full bg-red-500 text-white">${attack.type}</span></td>
-                <td class="px-4 py-2">${attack.rule}</td>
-                <td class="px-4 py-2">${attack.path}</td>
-            `;
-            tbody.appendChild(tr);
-        });
     }
     
-    // Time period selector for charts
-    document.querySelectorAll('.inline-flex[data-period]').forEach(group => {
-        group.addEventListener('click', function(e) {
-            if (e.target.tagName === 'BUTTON') {
-                // Remove active class and background from all buttons in this group
-                this.querySelectorAll('.active').forEach(btn => {
-                    btn.classList.remove('active', 'bg-gray-100');
-                    btn.classList.add('bg-white');
-                });
-                
-                // Add active class and background to clicked button
-                e.target.classList.add('active', 'bg-gray-100');
-                e.target.classList.remove('bg-white');
-                
-                // Get selected period
-                const period = e.target.getAttribute('data-period');
-                
-                // Update charts based on period
-                // In a real app, you'd fetch new data here
-            }
-        });
-    });
+    // Helper function to format dates
+    function formatDate(dateString) {
+        if (!dateString) return 'N/A';
+        const date = new Date(dateString);
+        return date.toLocaleString();
+    }
     
     // Set up tabs navigation
     const tabButtons = document.querySelectorAll('[data-tab]');
@@ -631,8 +549,17 @@ async function loadSiteRules() {
     document.getElementById('site-rules-empty').classList.add('hidden');
     
     try {
-        const response = await api.get(`/sites/${siteId}/waf/rules`);
-        const rules = response.data;
+        // Fetch rules data
+        const rulesResponse = await api.get(`/sites/${siteId}/waf/rules`);
+        const rules = rulesResponse.data;
+
+        // Fetch logs stats to get attack data
+        const logsResponse = await api.get(`/sites/${siteId}/logs`, {
+            params: {
+                page: 1,
+                page_size: 1 // We only need the stats
+            }
+        });
 
         if (!rules || rules.length === 0) {
             document.getElementById('site-rules-loading').classList.add('hidden');
@@ -651,11 +578,60 @@ async function loadSiteRules() {
         document.getElementById('rule-count-enabled').textContent = enabledRules;
         document.getElementById('rule-types-count').textContent = uniqueTypes;
 
-        // Mock data for attacks blocked - in a real app you'd get this from your API
-        document.getElementById('rule-count-blocked').textContent = Math.floor(Math.random() * 100);
+        // Update attacks blocked with real data from API
+        const attacksBlocked = logsResponse.data?.stats?.attacks_24h || 0;
+        document.getElementById('rule-count-blocked').textContent = attacksBlocked;
 
-        // Sort by last trigger time (mocked here)
-        const recentRules = [...rules].sort(() => Math.random() - 0.5).slice(0, 5);
+        // Fetch rule-specific stats - get blocked requests with rule IDs
+        const ruleStatsResponse = await api.get(`/sites/${siteId}/logs`, {
+            params: {
+                page: 1,
+                page_size: 100, // Get enough logs to count rule triggers
+                action: 'blocked'
+            }
+        });
+
+        // Calculate per-rule trigger counts and last triggered times
+        const ruleTriggers = {};
+        const ruleLastTriggered = {};
+        
+        if (ruleStatsResponse.data && ruleStatsResponse.data.data) {
+            const logs = ruleStatsResponse.data.data;
+            
+            // Process logs to count triggers by rule ID
+            logs.forEach(log => {
+                if (log.RuleID) {
+                    // Increment trigger count
+                    if (!ruleTriggers[log.RuleID]) {
+                        ruleTriggers[log.RuleID] = 0;
+                    }
+                    ruleTriggers[log.RuleID]++;
+                    
+                    // Track last triggered time
+                    const logTime = new Date(log.CreatedAt).getTime();
+                    if (!ruleLastTriggered[log.RuleID] || logTime > ruleLastTriggered[log.RuleID]) {
+                        ruleLastTriggered[log.RuleID] = logTime;
+                    }
+                }
+            });
+        }
+
+        // Get the top 5 most triggered rules
+        const topRuleIds = Object.keys(ruleTriggers)
+            .sort((a, b) => ruleTriggers[b] - ruleTriggers[a])
+            .slice(0, 5);
+
+        // Find the rule objects for the top triggered rules
+        const recentRules = rules.filter(rule => topRuleIds.includes(rule.id.toString()));
+        
+        // If we don't have enough triggered rules, add some non-triggered ones
+        if (recentRules.length < 5) {
+            const remainingRules = rules
+                .filter(rule => !topRuleIds.includes(rule.id.toString()))
+                .slice(0, 5 - recentRules.length);
+            
+            recentRules.push(...remainingRules);
+        }
 
         // Populate recent rules table
         const tbody = document.getElementById('recent-rules-tbody');
@@ -669,9 +645,14 @@ async function loadSiteRules() {
             const formattedType = formatRuleType(rule.type);
             const typeBadgeClass = getTypeBadgeClass(rule.type);
 
-            // Generate mock trigger count and time for demo purposes
-            const triggerCount = Math.floor(Math.random() * 50);
-            const lastTriggered = new Date(Date.now() - Math.floor(Math.random() * 86400000)).toLocaleString();
+            // Use real trigger count data if available, otherwise show 0
+            const triggerCount = ruleTriggers[rule.id] || 0;
+            
+            // Use real last triggered time if available, otherwise show 'Never'
+            let lastTriggered = 'Never';
+            if (ruleLastTriggered[rule.id]) {
+                lastTriggered = new Date(ruleLastTriggered[rule.id]).toLocaleString();
+            }
 
             row.innerHTML = `
                 <td class="px-4 py-2 font-medium">${rule.name}</td>

@@ -204,7 +204,6 @@ document.addEventListener('DOMContentLoaded', function() {
             // Get protected sites
             const sitesData = await api.get('/sites');
             if (sitesData.data && sitesData.status === 200) {
-                console.log(sitesData.data);
                 renderProtectedSites(sitesData.data);
             } else {
                 renderProtectedSites([]);
@@ -314,7 +313,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Add console logging to see the structure of attack data
-        console.log("Attack data:", attacks);
         
         attacks.forEach(attack => {
             const tr = document.createElement('tr');

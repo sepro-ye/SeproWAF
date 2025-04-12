@@ -175,8 +175,7 @@ function renderRules(rules) {
         const formattedType = formatRuleType(rule.type);
         
         // Format date
-        const createdDate = new Date(rule.created_at).toLocaleString();
-        
+        const createdDate = new Date(rule.createdAt).toLocaleString();
         // Status indicator
         const statusBadge = rule.status === 'enabled' 
             ? '<span class="px-2 py-1 text-xs font-medium rounded-full bg-green-500 text-white">Enabled</span>'
