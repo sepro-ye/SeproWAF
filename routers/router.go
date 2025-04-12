@@ -34,6 +34,7 @@ func init() {
 	web.Router("/settings", &controllers.UIController{}, "get:Settings")
 	web.Router("/waf/logs", &controllers.UIController{}, "get:WAFLogsList")
 	web.Router("/waf/logs/:id", &controllers.UIController{}, "get:WAFLogDetail")
+	web.Router("/waf/rules", &controllers.UIController{}, "get:GlobalRules")
 
 	// API Routes
 	// Public API routes
@@ -68,6 +69,7 @@ func init() {
 
 	// WAF logs routes
 	web.Router("/api/waf/logs", &controllers.WAFLogsController{}, "get:GetLogs")
+	web.Router("/api/sites/:id/logs", &controllers.WAFLogsController{}, "get:GetSiteLogs")
 	web.Router("/api/waf/logs/:id", &controllers.WAFLogsController{}, "get:GetLogDetails")
 
 	// Admin-only API routes
@@ -76,4 +78,9 @@ func init() {
 
 	web.Router("/api/user/:id/delete", &controllers.UserController{}, "delete:DeleteUser")
 	web.InsertFilter("/api/user/:id/delete", web.BeforeRouter, middleware.RBACMiddleware(models.RoleAdmin))
+
+	// Dashboard API routes
+	web.Router("/api/dashboard/stats", &controllers.DashboardController{}, "get:GetStats")
+	web.Router("/api/dashboard/traffic", &controllers.DashboardController{}, "get:GetTraffic")
+	web.Router("/api/dashboard/attack-types", &controllers.DashboardController{}, "get:GetAttackTypes")
 }

@@ -32,17 +32,7 @@ func (c *UIController) Register() {
 // Dashboard page
 func (c *UIController) Dashboard() {
 	// Try to get user from Authorization header first
-	user := c.GetUserFromAuthHeader()
-
-	// If not found in header, try cookie
-	if user == nil {
-		// Try localStorage via JavaScript check
-		c.Data["Title"] = "Dashboard"
-		c.Data["CheckAuth"] = true // Flag to trigger client-side auth check
-		c.Layout = "layout.tpl"
-		c.TplName = "dashboard/index.tpl"
-		return
-	}
+	user := c.GetUserFromJWT()
 
 	// User is authenticated
 	c.Data["Title"] = "Dashboard"
@@ -360,6 +350,86 @@ func (c *UIController) WAFLogDetail() {
 	c.Data["LogID"] = id
 	c.Layout = "layout.tpl"
 	c.TplName = "waf/log_detail.tpl"
+}
+
+// GlobalRules shows a list of all sites with custom WAF rules
+func (c *UIController) GlobalRules() {
+	// Ensure user is signed in
+	user := c.GetUserFromJWT()
+	if user == nil {
+		c.Redirect("/auth/login", 302)
+		return
+	}
+
+	// Get user ID and role
+	userID := user.ID
+	userRole := user.Role
+
+	o := orm.NewOrm()
+
+	// First get all WAF rules
+	var rules []*models.WAFRule
+	_, err := o.QueryTable(new(models.WAFRule)).All(&rules)
+	if err != nil {
+		c.Abort("500")
+		return
+	}
+
+	// Extract unique site IDs from rules
+	siteIDMap := make(map[int]bool)
+	for _, rule := range rules {
+		siteIDMap[rule.SiteID] = true
+	}
+
+	// Convert to slice
+	siteIDs := make([]int, 0, len(siteIDMap))
+	for siteID := range siteIDMap {
+		siteIDs = append(siteIDs, siteID)
+	}
+
+	// If no sites have rules, return empty list
+	if len(siteIDs) == 0 {
+		c.Data["Sites"] = []*models.Site{}
+		c.Data["RuleCounts"] = map[int]int{}
+		c.Data["PageTitle"] = "Global WAF Rules"
+		c.Layout = "layout.tpl"
+		c.TplName = "waf/global_rules.tpl"
+		return
+	}
+
+	// Get sites with rules based on user role
+	var sites []*models.Site
+	qb := o.QueryTable(new(models.Site)).Filter("ID__in", siteIDs)
+
+	// Apply user filter for non-admin users
+	if userRole != models.RoleAdmin {
+		qb = qb.Filter("UserID", userID)
+	}
+
+	// Order by domain name
+	_, err = qb.OrderBy("Domain").All(&sites)
+	if err != nil {
+		c.Abort("500")
+		return
+	}
+
+	// Get rule counts for each site
+	siteRuleCounts := make(map[int]int)
+	for _, site := range sites {
+		count, err := o.QueryTable(new(models.WAFRule)).Filter("SiteID", site.ID).Count()
+		if err != nil {
+			// If error, just set count to 0
+			siteRuleCounts[site.ID] = 0
+		} else {
+			siteRuleCounts[site.ID] = int(count)
+		}
+	}
+
+	c.Data["Sites"] = sites
+	c.Data["RuleCounts"] = siteRuleCounts
+	c.Data["PageTitle"] = "Global WAF Rules"
+	c.Layout = "layout.tpl"
+	c.TplName = "waf/global_rules.tpl"
 }
 
 // Helper to get user from JWT token

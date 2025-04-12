@@ -6,7 +6,7 @@
 </div>
 
 <div class="flex flex-wrap mb-4">
-    <div class="w-full md:w-1/4 px-2">
+    <div class="w-full md:w-1/3 px-2">
         <div class="bg-white rounded-lg shadow-md">
             <div class="p-4">
                 <div class="flex justify-between items-center mb-3">
@@ -23,7 +23,7 @@
         </div>
     </div>
     
-    <div class="w-full md:w-1/4 px-2">
+    <div class="w-full md:w-1/3 px-2">
         <div class="bg-white rounded-lg shadow-md">
             <div class="p-4">
                 <div class="flex justify-between items-center mb-3">
@@ -40,7 +40,7 @@
         </div>
     </div>
     
-    <div class="w-full md:w-1/4 px-2">
+    <div class="w-full md:w-1/3 px-2">
         <div class="bg-white rounded-lg shadow-md">
             <div class="p-4">
                 <div class="flex justify-between items-center mb-3">
@@ -53,23 +53,6 @@
             </div>
             <div class="px-4 py-2 border-t border-gray-100">
                 <a href="/waf/logs" class="no-underline text-blue-500 hover:text-blue-700">View all <i class="bi bi-arrow-right"></i></a>
-            </div>
-        </div>
-    </div>
-    
-    <div class="w-full md:w-1/4 px-2">
-        <div class="bg-white rounded-lg shadow-md">
-            <div class="p-4">
-                <div class="flex justify-between items-center mb-3">
-                    <div class="bg-yellow-500 text-white p-3 rounded-lg">
-                        <i class="bi bi-shield-check"></i>
-                    </div>
-                    <h3 class="text-xl font-bold" id="rules-count">--</h3>
-                </div>
-                <h6 class="text-gray-500">Active Rules</h6>
-            </div>
-            <div class="px-4 py-2 border-t border-gray-100">
-                <a href="/waf/rules" class="no-underline text-blue-500 hover:text-blue-700">Manage rules <i class="bi bi-arrow-right"></i></a>
             </div>
         </div>
     </div>
@@ -179,20 +162,52 @@ document.addEventListener('DOMContentLoaded', function() {
     // Fetch dashboard data
     async function fetchDashboardData() {
         try {
-            // In a real implementation, you would fetch this data from your API
-            // This is placeholder data for demonstration
+            // Fetch dashboard stats
+            const stats = await api.get('/dashboard/stats');
+            if (stats.data && stats.data.success) {
+                document.getElementById('sites-count').textContent = stats.data.sites_count || '0';
+                document.getElementById('attacks-count').textContent = stats.data.attacks_count || '0';
+                document.getElementById('requests-count').textContent = stats.data.requests_count || '0';
+            }
             
-            // Update stats
-            document.getElementById('sites-count').textContent = '3';
-            document.getElementById('attacks-count').textContent = '125';
-            document.getElementById('requests-count').textContent = '5.2K';
-            document.getElementById('rules-count').textContent = '42';
+            // Get traffic data for the chart
+            const trafficData = await api.get('/dashboard/traffic');
+            if (trafficData.data && trafficData.data.success) {
+                renderTrafficChart(trafficData.data.traffic);
+            } else {
+                renderTrafficChart(null);
+            }
             
-            // Generate sample data for charts
-            renderTrafficChart();
-            renderAttackTypesChart();
-            renderRecentAttacks();
-            renderProtectedSites();
+            // Get attack type distribution
+            const attackTypesData = await api.get('/dashboard/attack-types');
+            if (attackTypesData.data && attackTypesData.data.success) {
+                renderAttackTypesChart(attackTypesData.data.attack_types);
+            } else {
+                renderAttackTypesChart(null);
+            }
+            
+            // Get recent attacks
+            const recentAttacksData = await api.get('/waf/logs', {
+                params: {
+                    page: 1,
+                    page_size: 5,
+                    action: 'blocked'  // Changed from 'block' to 'blocked'
+                }
+            });
+            
+            if (recentAttacksData.data && recentAttacksData.data.success) {
+                renderRecentAttacks(recentAttacksData.data.data);
+            } else {
+                renderRecentAttacks([]);
+            }
+            
+            // Get protected sites
+            const sitesData = await api.get('/sites');
+            if (sitesData.data && sitesData.status === 200) {
+                renderProtectedSites(sitesData.data);
+            } else {
+                renderProtectedSites([]);
+            }
         } catch (error) {
             console.error('Error fetching dashboard data:', error);
             showToast('Failed to load dashboard data', 'danger');
@@ -200,16 +215,18 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Traffic chart
-    function renderTrafficChart() {
+    function renderTrafficChart(data) {
         const ctx = document.getElementById('trafficChart').getContext('2d');
         
-        const labels = Array.from({length: 24}, (_, i) => `${23-i}h ago`).reverse();
-        const data = {
+        // Use actual data if available, otherwise use placeholder data
+        const labels = data?.labels || Array.from({length: 24}, (_, i) => `${23-i}h ago`).reverse();
+        
+        const chartData = {
             labels: labels,
             datasets: [
                 {
                     label: 'Legitimate Traffic',
-                    data: Array.from({length: 24}, () => Math.floor(Math.random() * 100) + 100),
+                    data: data?.legitimate || Array.from({length: 24}, () => Math.floor(Math.random() * 100) + 100),
                     borderColor: '#3498db',
                     backgroundColor: 'rgba(52, 152, 219, 0.1)',
                     fill: true,
@@ -217,7 +234,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 {
                     label: 'Blocked Attacks',
-                    data: Array.from({length: 24}, () => Math.floor(Math.random() * 20)),
+                    data: data?.blocked || Array.from({length: 24}, () => Math.floor(Math.random() * 20)),
                     borderColor: '#e74c3c',
                     backgroundColor: 'rgba(231, 76, 60, 0.1)',
                     fill: true,
@@ -228,7 +245,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         new Chart(ctx, {
             type: 'line',
-            data: data,
+            data: chartData,
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
@@ -247,13 +264,17 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Attack types chart
-    function renderAttackTypesChart() {
+    function renderAttackTypesChart(data) {
         const ctx = document.getElementById('attackTypesChart').getContext('2d');
         
-        const data = {
-            labels: ['SQL Injection', 'XSS', 'CSRF', 'Path Traversal', 'Other'],
+        // Use actual data if available, otherwise use placeholder data
+        const labels = data?.labels || ['SQL Injection', 'XSS', 'CSRF', 'Path Traversal', 'Other'];
+        const values = data?.values || [45, 25, 12, 8, 10];
+        
+        const chartData = {
+            labels: labels,
             datasets: [{
-                data: [45, 25, 12, 8, 10],
+                data: values,
                 backgroundColor: [
                     '#e74c3c',
                     '#f39c12',
@@ -266,7 +287,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         new Chart(ctx, {
             type: 'doughnut',
-            data: data,
+            data: chartData,
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
@@ -280,51 +301,124 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Recent attacks table
-    function renderRecentAttacks() {
-        const attacksData = [
-            { time: '2025-04-07 10:23', ip: '192.168.1.45', type: 'SQL Injection', site: 'example.com' },
-            { time: '2025-04-07 10:15', ip: '45.82.144.12', type: 'XSS', site: 'myapp.com' },
-            { time: '2025-04-07 09:58', ip: '172.217.22.14', type: 'CSRF', site: 'example.com' },
-            { time: '2025-04-07 09:42', ip: '91.195.240.94', type: 'Path Traversal', site: 'blog.example.com' },
-            { time: '2025-04-07 09:36', ip: '104.18.21.226', type: 'SQL Injection', site: 'myapp.com' }
-        ];
-        
+    function renderRecentAttacks(attacks) {
         const tbody = document.getElementById('recent-attacks');
         tbody.innerHTML = '';
         
-        attacksData.forEach(attack => {
+        if (!attacks || attacks.length === 0) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td colspan="4" class="text-center py-4">No recent attacks</td>`;
+            tbody.appendChild(tr);
+            return;
+        }
+        
+        // Add console logging to see the structure of attack data
+        
+        attacks.forEach(attack => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td class="px-4 py-2 border-b border-gray-200">${attack.time}</td>
-                <td class="px-4 py-2 border-b border-gray-200">${attack.ip}</td>
-                <td class="px-4 py-2 border-b border-gray-200"><span class="inline-block px-2 py-1 text-xs font-semibold rounded-full bg-red-500 text-white">${attack.type}</span></td>
-                <td class="px-4 py-2 border-b border-gray-200">${attack.site}</td>
+                <td class="px-4 py-2 border-b border-gray-200">${formatDate(attack.CreatedAt || attack.created_at)}</td>
+                <td class="px-4 py-2 border-b border-gray-200">${attack.ClientIP || attack.client_ip}</td>
+                <td class="px-4 py-2 border-b border-gray-200">
+                    <span class="inline-block px-2 py-1 text-xs font-semibold rounded-full bg-red-500 text-white">
+                        ${attack.Category || attack.category || 'Unknown'}
+                    </span>
+                </td>
+                <td class="px-4 py-2 border-b border-gray-200">${attack.Domain || attack.domain}</td>
             `;
             tbody.appendChild(tr);
         });
     }
     
     // Protected sites table
-    function renderProtectedSites() {
-        const sitesData = [
-            { domain: 'example.com', status: 'Active', traffic: '2.3K', attacks: '58' },
-            { domain: 'myapp.com', status: 'Active', traffic: '1.8K', attacks: '42' },
-            { domain: 'blog.example.com', status: 'Active', traffic: '1.1K', attacks: '25' }
-        ];
-        
+    function renderProtectedSites(sites) {
         const tbody = document.getElementById('protected-sites');
         tbody.innerHTML = '';
         
-        sitesData.forEach(site => {
+        if (!sites || sites.length === 0) {
             const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td class="px-4 py-2 border-b border-gray-200">${site.domain}</td>
-                <td class="px-4 py-2 border-b border-gray-200"><span class="inline-block px-2 py-1 text-xs font-semibold rounded-full bg-green-500 text-white">${site.status}</span></td>
-                <td class="px-4 py-2 border-b border-gray-200">${site.traffic}</td>
-                <td class="px-4 py-2 border-b border-gray-200">${site.attacks}</td>
-            `;
+            tr.innerHTML = `<td colspan="4" class="text-center py-4">No protected sites</td>`;
             tbody.appendChild(tr);
-        });
+            return;
+        }
+        
+        // Show loading indicator
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4">Loading site statistics...</td></tr>`;
+        
+        // Create a function to fetch stats for all sites
+        const fetchAllSiteStats = async () => {
+            tbody.innerHTML = ''; // Clear loading message
+            
+            // Process each site
+            for (const site of sites) {
+                try {
+                    // Create a row for this site with placeholder values
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="px-4 py-2 border-b border-gray-200">${site.Domain}</td>
+                        <td class="px-4 py-2 border-b border-gray-200">
+                            <span class="inline-block px-2 py-1 text-xs font-semibold rounded-full 
+                                ${site.WAFEnabled ? 'bg-green-500' : 'bg-gray-500'} text-white">
+                                ${site.WAFEnabled ? 'Active' : 'Inactive'}
+                            </span>
+                        </td>
+                        <td class="px-4 py-2 border-b border-gray-200">
+                            <span class="loading-placeholder">Loading...</span>
+                        </td>
+                        <td class="px-4 py-2 border-b border-gray-200">
+                            <span class="loading-placeholder">Loading...</span>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                    
+                    // Fetch the site logs data
+                    const response = await api.get(`/sites/${site.ID}/logs`, {
+                        params: {
+                            page: 1,
+                            page_size: 1 // We only need the stats, not the actual logs
+                        }
+                    });
+                    
+                    // Update the row with the stats data
+                    if (response.data && response.data.success && response.data.stats) {
+                        const statsData = response.data.stats;
+                        const cells = tr.querySelectorAll('td');
+                        
+                        // Update traffic count (requests_24h)
+                        cells[2].innerHTML = formatNumber(statsData.requests_24h || 0);
+                        
+                        // Update attacks count (attacks_24h)
+                        cells[3].innerHTML = formatNumber(statsData.attacks_24h || 0);
+                    } else {
+                        // If there was an error or no stats, show zeros
+                        const cells = tr.querySelectorAll('td');
+                        cells[2].innerHTML = '0';
+                        cells[3].innerHTML = '0';
+                    }
+                } catch (error) {
+                    console.error(`Error fetching stats for site ${site.Domain}:`, error);
+                    // Leave the row with error indicators if needed
+                }
+            }
+        };
+        
+        // Start fetching stats for all sites
+        fetchAllSiteStats();
+    }
+    
+    // Helper function to format date
+    function formatDate(dateString) {
+        if (!dateString) return '--';
+        const date = new Date(dateString);
+        return date.toLocaleString();
+    }
+    
+    // Helper function to format numbers
+    function formatNumber(num) {
+        if (num >= 1000) {
+            return (num / 1000).toFixed(1) + 'K';
+        }
+        return num.toString();
     }
     
     // Load dashboard data

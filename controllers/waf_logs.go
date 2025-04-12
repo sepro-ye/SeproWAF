@@ -171,3 +171,164 @@ func (c *WAFLogsController) GetLogDetails() {
 	}
 	c.ServeJSON()
 }
+
+// GetSiteLogs returns WAF logs for a specific site with filtering and pagination
+func (c *WAFLogsController) GetSiteLogs() {
+	// Get site ID from URL parameter
+	siteIDStr := c.Ctx.Input.Param(":id")
+	siteID, err := strconv.Atoi(siteIDStr)
+	if err != nil {
+		c.Data["json"] = map[string]interface{}{
+			"success": false,
+			"message": "Invalid site ID",
+		}
+		c.ServeJSON()
+		return
+	}
+
+	// Get query parameters for filtering
+	clientIP := c.GetString("client_ip", "")
+	domain := c.GetString("domain", "")
+	action := c.GetString("action", "")
+	method := c.GetString("method", "")
+	uri := c.GetString("uri", "")
+	severity := c.GetString("severity", "")
+	category := c.GetString("category", "")
+
+	// Get date range
+	startDate := c.GetString("start_date", "")
+	endDate := c.GetString("end_date", "")
+
+	// Parse dates if provided
+	var startTime, endTime time.Time
+	if startDate != "" {
+		startTime, err = time.Parse("2006-01-02", startDate)
+		if err != nil {
+			c.Data["json"] = map[string]interface{}{
+				"success": false,
+				"message": "Invalid start date format. Use YYYY-MM-DD",
+			}
+			c.ServeJSON()
+			return
+		}
+	}
+
+	if endDate != "" {
+		endTime, err = time.Parse("2006-01-02", endDate)
+		if err != nil {
+			c.Data["json"] = map[string]interface{}{
+				"success": false,
+				"message": "Invalid end date format. Use YYYY-MM-DD",
+			}
+			c.ServeJSON()
+			return
+		}
+		// Set end time to end of day
+		endTime = endTime.Add(24*time.Hour - time.Second)
+	}
+
+	// Get pagination parameters
+	page, _ := c.GetInt("page", 1)
+	pageSize, _ := c.GetInt("page_size", 20)
+
+	// Build filters
+	filters := make(map[string]interface{})
+
+	// Always filter by the provided site ID - use "SiteID" (capitalized) instead of "site_id"
+	filters["SiteID"] = siteID
+
+	if clientIP != "" {
+		filters["client_ip"] = clientIP
+	}
+	if domain != "" {
+		filters["domain__icontains"] = domain
+	}
+	if action != "" {
+		filters["action"] = action
+	}
+	if method != "" {
+		filters["method"] = method
+	}
+	if uri != "" {
+		filters["uri__icontains"] = uri
+	}
+	if severity != "" {
+		filters["severity"] = severity
+	}
+	if category != "" {
+		filters["category"] = category
+	}
+
+	// Add date range filters
+	if !startTime.IsZero() {
+		filters["created_at__gte"] = startTime
+	}
+	if !endTime.IsZero() {
+		filters["created_at__lte"] = endTime
+	}
+
+	// Query logs
+	logs, total, err := services.GetWAFLogService().QueryLogs(filters, page, pageSize)
+	if err != nil {
+		c.Data["json"] = map[string]interface{}{
+			"success": false,
+			"message": "Failed to query logs: " + err.Error(),
+		}
+		c.ServeJSON()
+		return
+	}
+
+	// Calculate pagination info
+	totalPages := (total + int64(pageSize) - 1) / int64(pageSize)
+
+	// Get attack and request counts for the site
+	o := orm.NewOrm()
+	oneDayAgo := time.Now().Add(-24 * time.Hour)
+
+	// Requests count in last 24h for this site
+	var requestsCount24h int64
+	requestsCount24h, _ = o.QueryTable(new(models.WAFLog)).
+		Filter("SiteID", siteID).
+		Filter("created_at__gte", oneDayAgo).
+		Count()
+
+	// Attacks count in last 24h for this site
+	var attacksCount24h int64
+	attacksCount24h, _ = o.QueryTable(new(models.WAFLog)).
+		Filter("SiteID", siteID).
+		Filter("created_at__gte", oneDayAgo).
+		Filter("action", "blocked").
+		Count()
+
+	// Total requests count (all time) for this site
+	var requestsCountAll int64
+	requestsCountAll, _ = o.QueryTable(new(models.WAFLog)).
+		Filter("SiteID", siteID).
+		Count()
+
+	// Total attacks count (all time) for this site
+	var attacksCountAll int64
+	attacksCountAll, _ = o.QueryTable(new(models.WAFLog)).
+		Filter("SiteID", siteID).
+		Filter("action", "blocked").
+		Count()
+
+	c.Data["json"] = map[string]interface{}{
+		"success": true,
+		"data":    logs,
+		"pagination": map[string]interface{}{
+			"page":        page,
+			"page_size":   pageSize,
+			"total":       total,
+			"total_pages": totalPages,
+		},
+		"site_id": siteID,
+		"stats": map[string]interface{}{
+			"requests_24h": requestsCount24h,
+			"attacks_24h":  attacksCount24h,
+			"requests_all": requestsCountAll,
+			"attacks_all":  attacksCountAll,
+		},
+	}
+	c.ServeJSON()
+}
