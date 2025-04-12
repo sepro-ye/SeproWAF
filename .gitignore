@@ -2,3 +2,6 @@ conf/app.conf
 conf/*.conf
 SeproWAF
 SeproWAF.exe
+rules/site_*
+rules/site_*/custom_rules.conf
+custom_rules.conf
