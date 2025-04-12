@@ -34,6 +34,7 @@ func init() {
 	web.Router("/settings", &controllers.UIController{}, "get:Settings")
 	web.Router("/waf/logs", &controllers.UIController{}, "get:WAFLogsList")
 	web.Router("/waf/logs/:id", &controllers.UIController{}, "get:WAFLogDetail")
+	web.Router("/waf/rules", &controllers.UIController{}, "get:GlobalRules")
 
 	// API Routes
 	// Public API routes
