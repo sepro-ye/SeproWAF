@@ -25,52 +25,102 @@
                 <form id="logFilterForm" class="flex flex-wrap">
                     <div class="w-full md:w-1/4 px-2 mb-3">
                         <label for="site_id" class="block text-sm font-medium text-gray-700 mb-1">Site</label>
-                        <select id="site_id" name="site_id" class="block w-full mt-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                            <option value="">All Sites</option>
-                            <!-- Sites will be loaded dynamically -->
-                        </select>
+                        <div class="relative">
+                            <select id="site_id" name="site_id" class="block w-full rounded-md border-gray-300 bg-white pl-3 pr-10 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm appearance-none">
+                                <option value="">All Sites</option>
+                                <!-- Sites will be loaded dynamically -->
+                            </select>
+                            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                        </div>
                     </div>
                     <div class="w-full md:w-1/4 px-2 mb-3">
                         <label for="client_ip" class="block text-sm font-medium text-gray-700 mb-1">Client IP</label>
-                        <input type="text" id="client_ip" name="client_ip" class="block w-full mt-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="e.g. 192.168.1.1">
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9-3-9m-9 9a9 9 0 019-9" />
+                                </svg>
+                            </div>
+                            <input type="text" id="client_ip" name="client_ip" class="block w-full pl-10 pr-3 py-2 rounded-md border-gray-300 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="e.g. 192.168.1.1">
+                        </div>
                     </div>
                     <div class="w-full md:w-1/4 px-2 mb-3">
                         <label for="action" class="block text-sm font-medium text-gray-700 mb-1">Action</label>
-                        <select id="action" name="action" class="block w-full mt-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                            <option value="">All Actions</option>
-                            <option value="allowed">Allowed</option>
-                            <option value="blocked">Blocked</option>
-                            <option value="blocked_response">Blocked Response</option>
-                        </select>
+                        <div class="relative">
+                            <select id="action" name="action" class="block w-full rounded-md border-gray-300 bg-white pl-3 pr-10 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm appearance-none">
+                                <option value="">All Actions</option>
+                                <option value="allowed">Allowed</option>
+                                <option value="blocked">Blocked</option>
+                                <option value="blocked_response">Blocked Response</option>
+                            </select>
+                            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                        </div>
                     </div>
                     <div class="w-full md:w-1/4 px-2 mb-3">
                         <label for="severity" class="block text-sm font-medium text-gray-700 mb-1">Severity</label>
-                        <select id="severity" name="severity" class="block w-full mt-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                            <option value="">All Severities</option>
-                            <option value="critical">Critical</option>
-                            <option value="high">High</option>
-                            <option value="medium">Medium</option>
-                            <option value="low">Low</option>
-                        </select>
+                        <div class="relative">
+                            <select id="severity" name="severity" class="block w-full rounded-md border-gray-300 bg-white pl-3 pr-10 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm appearance-none">
+                                <option value="">All Severities</option>
+                                <option value="critical">Critical</option>
+                                <option value="high">High</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                            </select>
+                            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                        </div>
                     </div>
                     <div class="w-full md:w-1/4 px-2 mb-3">
                         <label for="method" class="block text-sm font-medium text-gray-700 mb-1">Method</label>
-                        <select id="method" name="method" class="block w-full mt-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                            <option value="">All Methods</option>
-                            <option value="GET">GET</option>
-                            <option value="POST">POST</option>
-                            <option value="PUT">PUT</option>
-                            <option value="DELETE">DELETE</option>
-                            <option value="HEAD">HEAD</option>
-                        </select>
+                        <div class="relative">
+                            <select id="method" name="method" class="block w-full rounded-md border-gray-300 bg-white pl-3 pr-10 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm appearance-none">
+                                <option value="">All Methods</option>
+                                <option value="GET">GET</option>
+                                <option value="POST">POST</option>
+                                <option value="PUT">PUT</option>
+                                <option value="DELETE">DELETE</option>
+                                <option value="HEAD">HEAD</option>
+                            </select>
+                            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                        </div>
                     </div>
                     <div class="w-full md:w-1/4 px-2 mb-3">
                         <label for="uri" class="block text-sm font-medium text-gray-700 mb-1">URI</label>
-                        <input type="text" id="uri" name="uri" class="block w-full mt-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="e.g. /admin">
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 015.656 0l4 4a4 4 0 01-5.656 5.656l-1.102-1.101" />
+                                </svg>
+                            </div>
+                            <input type="text" id="uri" name="uri" class="block w-full pl-10 pr-3 py-2 rounded-md border-gray-300 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="e.g. /admin">
+                        </div>
                     </div>
                     <div class="w-full md:w-1/4 px-2 mb-3">
                         <label for="start_date" class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-                        <input type="date" id="start_date" name="start_date" class="block w-full mt-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                            </div>
+                            <input type="date" id="start_date" name="start_date" class="block w-full pl-10 pr-3 py-2 rounded-md border-gray-300 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
                     </div>
                     <div class="w-full md:w-1/4 px-2 mb-3">
                         <label for="end_date" class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
@@ -134,12 +184,19 @@
             <div class="px-4 py-3 border-t">
                 <div class="flex justify-between">
                     <div>
-                        <select id="page-size" class="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                            <option value="10">10 per page</option>
-                            <option value="20" selected>20 per page</option>
-                            <option value="50">50 per page</option>
-                            <option value="100">100 per page</option>
-                        </select>
+                        <div class="relative">
+                            <select id="page-size" class="rounded-md border-gray-300 shadow-sm bg-white pl-3 pr-10 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none">
+                                <option value="10">10 per page</option>
+                                <option value="20" selected>20 per page</option>
+                                <option value="50">50 per page</option>
+                                <option value="100">100 per page</option>
+                            </select>
+                            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                        </div>
                     </div>
                     <div class="flex space-x-1" id="pagination-container">
                         <!-- Pagination will be loaded here -->
