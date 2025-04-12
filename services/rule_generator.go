@@ -90,14 +90,30 @@ func (rg *RuleGenerator) RegisterTemplate(ruleType models.WAFRuleType, name stri
 
 // GenerateRule generates a ModSecurity rule from a WAF rule
 func (rg *RuleGenerator) GenerateRule(rule *models.WAFRule) (string, error) {
+	// Handle custom rules first, before checking for templates
+	if rule.Type == models.CustomRule {
+		// If RuleText is empty but exists in Parameters, extract it from Parameters
+		if rule.RuleText == "" && rule.Parameters != "" {
+			var params map[string]interface{}
+			if err := json.Unmarshal([]byte(rule.Parameters), &params); err == nil {
+				if ruleText, ok := params["ruleText"].(string); ok {
+					return ruleText, nil
+				}
+			}
+		}
 
+		// Check if RuleText is empty
+		if rule.RuleText == "" {
+			return "", fmt.Errorf("custom rule has no rule text")
+		}
+
+		return rule.RuleText, nil
+	}
+
+	// For non-custom rules, check for templates
 	templates, exists := rg.templates[rule.Type]
 	if !exists {
 		return "", fmt.Errorf("no templates found for rule type: %s", rule.Type)
-	}
-
-	if rule.Type == models.CustomRule {
-		return rule.RuleText, nil
 	}
 
 	var params map[string]interface{}
@@ -105,7 +121,6 @@ func (rg *RuleGenerator) GenerateRule(rule *models.WAFRule) (string, error) {
 	if rule.Parameters != "" {
 		err := json.Unmarshal([]byte(rule.Parameters), &params)
 		if err != nil {
-
 			// Try nested unmarshal if stringified JSON
 			var quoted string
 			if err := json.Unmarshal([]byte(rule.Parameters), &quoted); err == nil {
@@ -154,10 +169,28 @@ func (rg *RuleGenerator) GenerateRule(rule *models.WAFRule) (string, error) {
 
 // ValidateRuleParameters validates rule parameters
 func (rg *RuleGenerator) ValidateRuleParameters(rule *models.WAFRule) error {
-
 	// Custom rule check
+	fmt.Println("Validating rule parameters for rule type:", rule.Type)
+	fmt.Println("Rule:", rule)
+	fmt.Println("RuleText:", rule.RuleText)
+	fmt.Println("Parameters:", rule.Parameters)
+
 	if rule.Type == models.CustomRule {
+		// Check for rule text directly or in parameters
 		if rule.RuleText == "" {
+			// Try to extract rule text from Parameters
+			var params map[string]interface{}
+			if rule.Parameters != "" {
+				if err := json.Unmarshal([]byte(rule.Parameters), &params); err == nil {
+					if ruleText, ok := params["ruleText"].(string); ok && ruleText != "" {
+						// If found in parameters, copy it to RuleText for consistency
+						rule.RuleText = ruleText
+						fmt.Println("Extracted rule text from parameters:", ruleText)
+						fmt.Println("RuleText after extraction:", rule.RuleText)
+						return nil
+					}
+				}
+			}
 			return fmt.Errorf("custom rule requires rule text")
 		}
 		return nil
@@ -197,7 +230,6 @@ func (rg *RuleGenerator) ValidateRuleParameters(rule *models.WAFRule) error {
 	} else {
 		// Try to parse Parameters directly
 		if err := json.Unmarshal([]byte(rule.Parameters), &params); err != nil {
-
 			// Try to unmarshal as quoted string
 			var quoted string
 			if e := json.Unmarshal([]byte(rule.Parameters), &quoted); e == nil {
@@ -209,8 +241,6 @@ func (rg *RuleGenerator) ValidateRuleParameters(rule *models.WAFRule) error {
 			}
 		}
 	}
-
-	// Final value of params before validation
 
 	// Rule type specific validation
 	switch rule.Type {
