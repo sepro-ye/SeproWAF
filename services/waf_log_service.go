@@ -3,8 +3,10 @@ package services
 import (
 	"SeproWAF/models"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -196,40 +198,167 @@ func (s *WAFLogService) createLogObjects(entry *WAFLogEntry) (*models.WAFLog, []
 		clientIP = ip
 	}
 
-	// Extract matched rules
 	var matchedRules string
-	var severity string
-	var category string
 	var ruleMatches []map[string]interface{}
+	var severity, category string
 
-	// Process rule matches from the interruption if available
-	if interruption := tx.Interruption(); interruption != nil {
-		// Extract rule information from the interruption
-		severity = getSeverityFromScore(interruption.RuleID)
-		category = getCategoryFromRule(interruption.RuleID)
+	// Track interruption rule ID to avoid duplicates
+	var interruptionRuleID int = 0
+	var interruptionFound bool = false
 
-		// Create a rule match entry for the rule that caused the interruption
-		match := map[string]interface{}{
-			"id":       interruption.RuleID,
-			"severity": severity,
-			"category": category,
-			"message":  interruption.Action, // This might need adjustment based on Coraza's API
+	// Process interruption first if available
+	interruption := tx.Interruption()
+	if interruption != nil {
+		interruptionRuleID = interruption.RuleID
+
+		// We'll set default values for severity and category
+		severity = "unknown"
+		category = "unknown"
+
+		// We'll update these when we process matched rules if we find the rule
+		interruptionMatch := map[string]interface{}{
+			"id":             interruptionRuleID,
+			"message":        interruption.Data,
+			"severity":       severity,
+			"category":       category,
+			"phase":          "unknown",
+			"matched_data":   "",
+			"variable_name":  "",
+			"operator":       interruption.Action,
+			"operator_value": "",
+			"file":           "",
+			"line":           0,
+			"match_details":  []map[string]interface{}{},
+			"isInterruption": true,
+		}
+		ruleMatches = append(ruleMatches, interruptionMatch)
+	}
+
+	// Process all matched rules
+	for _, rule := range tx.MatchedRules() {
+		r := rule.Rule()
+
+		// Extract category from tags
+		ruleCategory := extractCategoryFromTags(r.Tags())
+		ruleSeverity := r.Severity().String()
+
+		// Extract variable matches and rule details for better display
+		var matchDetails []map[string]interface{}
+		var matchedData, variableName string
+
+		// Extract matched data from the rule if available
+		for _, matchData := range rule.MatchedDatas() {
+			matchDetails = append(matchDetails, map[string]interface{}{
+				"variable": matchData.Variable(),
+				"key":      matchData.Key(),
+				"value":    matchData.Value(),
+				"message":  matchData.Message(),
+				"data":     matchData.Data(),
+			})
+
+			// Use the first match for summary display
+			if matchedData == "" {
+				matchedData = matchData.Value()
+				variableName = matchData.Variable().Name()
+				if matchData.Key() != "" {
+					variableName += ":" + matchData.Key()
+				}
+			}
 		}
 
-		ruleMatches = append(ruleMatches, match)
+		// If this is the interruption rule, update our main log severity and category
+		if interruption != nil && r.ID() == interruptionRuleID {
+			interruptionFound = true
+			severity = ruleSeverity
+			category = ruleCategory
 
-		// Serialize matches to JSON for the main log record
-		if matchedJSON, err := json.Marshal(ruleMatches); err == nil {
-			matchedRules = string(matchedJSON)
+			// Update the interruption match we added earlier with complete data
+			for i, match := range ruleMatches {
+				if id, ok := match["id"].(int); ok && id == interruptionRuleID {
+					// Use properly expanded rule message
+					ruleMatches[i]["message"] = rule.Message()
+					ruleMatches[i]["full_rule"] = r.Raw()
+					ruleMatches[i]["severity"] = ruleSeverity
+					ruleMatches[i]["category"] = ruleCategory
+					ruleMatches[i]["phase"] = r.Phase()
+					ruleMatches[i]["operator"] = r.Operator()
+					ruleMatches[i]["file"] = r.File()
+					ruleMatches[i]["line"] = r.Line()
+					ruleMatches[i]["revision"] = r.Revision()
+					ruleMatches[i]["version"] = r.Version()
+					ruleMatches[i]["tags"] = r.Tags()
+					ruleMatches[i]["maturity"] = r.Maturity()
+					ruleMatches[i]["accuracy"] = r.Accuracy()
+					ruleMatches[i]["secmark"] = r.SecMark()
+					ruleMatches[i]["data"] = rule.Data()
+					ruleMatches[i]["is_disruptive"] = rule.Disruptive()
+					// Include matched data info
+					ruleMatches[i]["matched_data"] = matchedData
+					ruleMatches[i]["variable_name"] = variableName
+					ruleMatches[i]["match_details"] = matchDetails
+					break
+				}
+			}
+		}
+
+		// Add this rule to matches if it's not the interruption rule we already added
+		if interruption == nil || r.ID() != interruptionRuleID || !interruptionFound {
+			// Create the full rule display for UI rendering
+			fullRuleText := r.Raw()
+			// If we have the rule ID, try to format it like ModSecurity rule
+			if r.ID() > 0 && fullRuleText == "" {
+				fullRuleText = fmt.Sprintf("SecRule %s \"%s\" \"id:%d, phase:%s, %s, severity:%s\"",
+					variableName,
+					matchedData,
+					r.ID(),
+					fmt.Sprintf("%v", r.Phase()),
+					r.Operator(),
+					r.Severity())
+			}
+
+			match := map[string]interface{}{
+				"id":             r.ID(),
+				"message":        rule.Message(), // Use MatchedRule.Message() which is macro-expanded
+				"full_rule":      fullRuleText,   // Full rule text for display
+				"severity":       ruleSeverity,
+				"category":       ruleCategory,
+				"phase":          r.Phase(),
+				"operator":       r.Operator(),
+				"matched_data":   matchedData,
+				"variable_name":  variableName,
+				"file":           r.File(),
+				"line":           r.Line(),
+				"revision":       r.Revision(),
+				"version":        r.Version(),
+				"tags":           r.Tags(),
+				"maturity":       r.Maturity(),
+				"accuracy":       r.Accuracy(),
+				"secmark":        r.SecMark(),
+				"match_details":  matchDetails,
+				"data":           rule.Data(), // Get expanded log data
+				"is_disruptive":  rule.Disruptive(),
+				"isInterruption": false,
+			}
+			ruleMatches = append(ruleMatches, match)
+		}
+	}
+
+	// If no matched rule was found for the interruption, keep the default values
+	if interruption != nil && !interruptionFound {
+		logs.Warning("Interruption rule (ID: %d) not found in matched rules", interruptionRuleID)
+	}
+
+	if len(ruleMatches) > 0 {
+		if jsonData, err := json.Marshal(ruleMatches); err == nil {
+			matchedRules = string(jsonData)
 		} else {
-			logs.Error("Failed to marshal rule matches: %v", err)
-			matchedRules = "{}"
+			logs.Error("Failed to marshal matched rules: %v", err)
+			matchedRules = "[]"
 		}
 	} else {
 		matchedRules = "[]"
 	}
 
-	// Create the log object
 	log := &models.WAFLog{
 		TransactionID:   tx.ID(),
 		SiteID:          entry.SiteID,
@@ -253,23 +382,20 @@ func (s *WAFLogService) createLogObjects(entry *WAFLogEntry) (*models.WAFLog, []
 		CreatedAt:       entry.Timestamp,
 	}
 
-	// Create detail objects if enabled
 	var details []*models.WAFLogDetail
 	if s.logDetails {
-		// Add request headers
-		if headerBytes, err := json.Marshal(req.Header); err == nil {
+		if headers, err := json.Marshal(req.Header); err == nil {
 			details = append(details, &models.WAFLogDetail{
 				DetailType: "request_headers",
-				Content:    string(headerBytes),
+				Content:    string(headers),
 			})
 		}
 
-		// Add rule matches if available
 		if len(ruleMatches) > 0 {
-			if matchesBytes, err := json.Marshal(ruleMatches); err == nil {
+			if matchBytes, err := json.Marshal(ruleMatches); err == nil {
 				details = append(details, &models.WAFLogDetail{
 					DetailType: "rule_matches",
-					Content:    string(matchesBytes),
+					Content:    string(matchBytes),
 				})
 			}
 		}
@@ -278,14 +404,102 @@ func (s *WAFLogService) createLogObjects(entry *WAFLogEntry) (*models.WAFLog, []
 	return log, details
 }
 
-// Placeholder functions - implement based on your rules
-func getSeverityFromScore(ruleID int) string {
-	// Implement logic to map rule ID to severity
-	return "medium"
-}
+// extractCategoryFromTags tries to determine a category from rule tags
+func extractCategoryFromTags(tags []string) string {
+	// Common WAF rule categories to look for in tags
+	exactCategories := map[string]bool{
+		"sql":                true,
+		"sqli":               true,
+		"xss":                true,
+		"rce":                true,
+		"lfi":                true,
+		"rfi":                true,
+		"command_injection":  true,
+		"injection":          true,
+		"session_fixation":   true,
+		"csrf":               true,
+		"protocol":           true,
+		"protocol_violation": true,
+		"method":             true,
+		"request_limit":      true,
+		"content":            true,
+		"evading":            true,
+		"file_upload":        true,
+		"policy":             true,
+		"scanner":            true,
+		"bot":                true,
+		"reputation":         true,
+		"error":              true,
+		"application":        true,
+		"access_control":     true,
+		"data_leakage":       true,
+	}
 
-func getCategoryFromRule(ruleID int) string {
-	// Implement logic to map rule ID to category
+	// Category keywords to look for as substrings
+	categoryKeywords := []struct {
+		keyword  string
+		category string
+	}{
+		{"sql", "sql"},
+		{"sqli", "sql"},
+		{"sql_injection", "sql"},
+		{"xss", "xss"},
+		{"cross-site", "xss"},
+		{"command", "command_injection"},
+		{"rce", "rce"},
+		{"remote", "rce"},
+		{"execution", "rce"},
+		{"inclusion", "lfi"},
+		{"lfi", "lfi"},
+		{"rfi", "rfi"},
+		{"traversal", "lfi"},
+		{"directory", "lfi"},
+		{"path", "lfi"},
+		{"injection", "injection"},
+		{"csrf", "csrf"},
+		{"session", "session_fixation"},
+		{"fixation", "session_fixation"},
+		{"protocol", "protocol"},
+		{"violation", "protocol_violation"},
+		{"method", "method"},
+		{"request", "request_limit"},
+		{"limit", "request_limit"},
+		{"content", "content"},
+		{"evading", "evading"},
+		{"evasion", "evading"},
+		{"bypass", "evading"},
+		{"upload", "file_upload"},
+		{"file", "file_upload"},
+		{"policy", "policy"},
+		{"scanner", "scanner"},
+		{"bot", "bot"},
+		{"reputation", "reputation"},
+		{"error", "error"},
+		{"app", "application"},
+		{"access", "access_control"},
+		{"leakage", "data_leakage"},
+		{"leak", "data_leakage"},
+		{"disclosure", "data_leakage"},
+	}
+
+	// First, try exact matches (faster)
+	for _, tag := range tags {
+		if exactCategories[tag] {
+			return tag
+		}
+	}
+
+	// Then, try substring matching
+	for _, tag := range tags {
+		tagLower := strings.ToLower(tag)
+		for _, kw := range categoryKeywords {
+			if strings.Contains(tagLower, kw.keyword) {
+				return kw.category
+			}
+		}
+	}
+
+	// Return a default if no known category is found
 	return "unknown"
 }
 

@@ -437,53 +437,134 @@ document.addEventListener('DOMContentLoaded', function() {
         
         let html = '';
         
+        // Sort matches - put interruption rules first
+        matches.sort((a, b) => {
+            // Sort by interruption status first (interruption rules come first)
+            if (a.isInterruption && !b.isInterruption) return -1;
+            if (!a.isInterruption && b.isInterruption) return 1;
+            
+            // Then sort by severity (critical first)
+            const severityOrder = {
+                'critical': 0,
+                'high': 1, 
+                'medium': 2,
+                'low': 3,
+                'unknown': 4
+            };
+            
+            const severityA = (a.severity || 'unknown').toLowerCase();
+            const severityB = (b.severity || 'unknown').toLowerCase();
+            
+            if (severityOrder[severityA] !== severityOrder[severityB]) {
+                return severityOrder[severityA] - severityOrder[severityB];
+            }
+            
+            // Finally sort by ID
+            return a.id - b.id;
+        });
+        
         matches.forEach((match, index) => {
-            let severityClass;
+            // Determine severity class for styling
+            let severityClass = 'bg-gray-500';
             if (match.severity) {
                 switch (match.severity.toLowerCase()) {
                     case 'critical': severityClass = 'bg-red-500'; break;
                     case 'high': severityClass = 'bg-orange-500'; break;
-                    case 'medium': severityClass = 'bg-yellow-500'; break;
+                    case 'medium': severityClass = 'bg-yellow-600'; break;
                     case 'low': severityClass = 'bg-blue-500'; break;
-                    default: severityClass = 'bg-gray-500';
                 }
-            } else {
-                severityClass = 'bg-gray-500';
             }
             
+            // Build the rule card
             html += `
-                <div class="mb-4 border rounded-md overflow-hidden">
-                    <div class="px-4 py-2 ${severityClass} text-white font-medium">
-                        Rule ID: ${match.id || 'N/A'}
+                <div class="mb-6 border rounded-md overflow-hidden ${match.isInterruption ? 'border-red-500 shadow-md' : ''}">
+                    <div class="px-4 py-3 ${severityClass} text-white font-medium flex justify-between items-center">
+                        <div>Rule ID: ${match.id || 'N/A'}</div>
+                        ${match.isInterruption ? '<span class="bg-white text-red-600 px-2 py-1 rounded-full text-xs font-bold">INTERRUPTION</span>' : ''}
                     </div>
+                    
                     <div class="p-4">
-                        <h6 class="font-medium mb-2">${escapeHtml(match.name || 'Default Rules')}</h6>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div>
                                 <p class="text-sm text-gray-600 mb-1">Message:</p>
-                                <p class="mb-3">${escapeHtml(match.message || 'No message')}</p>
+                                <p class="mb-3 font-medium">${escapeHtml(match.message || 'No message')}</p>
                             </div>
                             <div>
-                                <p class="text-sm text-gray-600 mb-1">Details:</p>
-                                <div class="flex flex-wrap mb-3">
+                                <div class="flex flex-wrap">
                                     <div class="w-1/2 mb-2">
-                                        <span class="text-sm font-medium">Severity:</span>
-                                        <span class="px-2 py-1 text-xs font-medium rounded-full ${severityClass} text-white">
+                                        <span class="text-sm text-gray-600">Severity:</span>
+                                        <span class="ml-1 px-2 py-1 text-xs font-medium rounded-full ${severityClass} text-white">
                                             ${match.severity ? match.severity.toUpperCase() : 'N/A'}
                                         </span>
                                     </div>
                                     <div class="w-1/2 mb-2">
-                                        <span class="text-sm font-medium">Category:</span>
-                                        <span>${match.category || 'N/A'}</span>
+                                        <span class="text-sm text-gray-600">Category:</span>
+                                        <span class="ml-1">${match.category || 'N/A'}</span>
+                                    </div>
+                                    <div class="w-1/2 mb-2">
+                                        <span class="text-sm text-gray-600">Phase:</span>
+                                        <span class="ml-1">${match.phase || 'N/A'}</span>
+                                    </div>
+                                    <div class="w-1/2 mb-2">
+                                        <span class="text-sm text-gray-600">Operator:</span>
+                                        <span class="ml-1">${match.operator || 'N/A'}</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        ${match.data ? `
-                        <div class="mt-2">
-                            <p class="text-sm text-gray-600 mb-1">Match Data:</p>
-                            <pre class="bg-gray-100 p-2 rounded-md overflow-x-auto text-xs">${escapeHtml(match.data)}</pre>
+                        
+                        <!-- Full Rule Display -->
+                        <div class="mt-4">
+                            <p class="text-sm text-gray-600 mb-2">Rule Definition:</p>
+                            <div class="bg-gray-800 text-white p-3 rounded-md overflow-x-auto">
+                                <pre class="whitespace-pre-wrap text-xs font-mono">${escapeHtml(match.full_rule || match.message || 'Rule definition not available')}</pre>
+                            </div>
+                        </div>
+                        
+                        <!-- Matched Data Section -->
+                        ${match.matched_data ? `
+                        <div class="mt-4">
+                            <p class="text-sm text-gray-600 mb-2">Matched Data:</p>
+                            <div class="bg-gray-100 border border-gray-300 p-3 rounded-md">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div>
+                                        <span class="text-xs font-medium">Variable:</span>
+                                        <span class="text-xs ml-1">${escapeHtml(match.variable_name || 'N/A')}</span>
+                                    </div>
+                                    <div>
+                                        <span class="text-xs font-medium">Value:</span>
+                                        <span class="text-xs ml-1">${escapeHtml(match.matched_data || 'N/A')}</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>` : ''}
+                        
+                        <!-- Rule Details - Technical Info -->
+                        <div class="mt-4">
+                            <button type="button" class="text-sm text-blue-600 hover:text-blue-800" 
+                                    onclick="this.nextElementSibling.classList.toggle('hidden')">
+                                Show Technical Details
+                            </button>
+                            <div class="hidden mt-2 bg-gray-50 p-3 rounded-md text-xs">
+                                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                    <div><span class="font-medium">File:</span> ${match.file || 'N/A'}</div>
+                                    <div><span class="font-medium">Line:</span> ${match.line || 'N/A'}</div>
+                                    <div><span class="font-medium">Version:</span> ${match.version || 'N/A'}</div>
+                                    <div><span class="font-medium">Revision:</span> ${match.revision || 'N/A'}</div>
+                                    <div><span class="font-medium">Accuracy:</span> ${match.accuracy || 'N/A'}</div>
+                                    <div><span class="font-medium">Maturity:</span> ${match.maturity || 'N/A'}</div>
+                                    <div><span class="font-medium">SecMark:</span> ${match.secmark || 'N/A'}</div>
+                                    <div><span class="font-medium">Is Disruptive:</span> ${match.is_disruptive ? 'Yes' : 'No'}</div>
+                                </div>
+                                ${match.tags && match.tags.length ? `
+                                <div class="mt-2">
+                                    <span class="font-medium">Tags:</span> 
+                                    <div class="mt-1 flex flex-wrap gap-1">
+                                        ${match.tags.map(tag => `<span class="bg-gray-200 text-gray-800 px-2 py-1 rounded text-xs">${escapeHtml(tag)}</span>`).join('')}
+                                    </div>
+                                </div>` : ''}
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;

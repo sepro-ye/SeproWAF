@@ -170,10 +170,6 @@ func (rg *RuleGenerator) GenerateRule(rule *models.WAFRule) (string, error) {
 // ValidateRuleParameters validates rule parameters
 func (rg *RuleGenerator) ValidateRuleParameters(rule *models.WAFRule) error {
 	// Custom rule check
-	fmt.Println("Validating rule parameters for rule type:", rule.Type)
-	fmt.Println("Rule:", rule)
-	fmt.Println("RuleText:", rule.RuleText)
-	fmt.Println("Parameters:", rule.Parameters)
 
 	if rule.Type == models.CustomRule {
 		// Check for rule text directly or in parameters
@@ -185,8 +181,6 @@ func (rg *RuleGenerator) ValidateRuleParameters(rule *models.WAFRule) error {
 					if ruleText, ok := params["ruleText"].(string); ok && ruleText != "" {
 						// If found in parameters, copy it to RuleText for consistency
 						rule.RuleText = ruleText
-						fmt.Println("Extracted rule text from parameters:", ruleText)
-						fmt.Println("RuleText after extraction:", rule.RuleText)
 						return nil
 					}
 				}

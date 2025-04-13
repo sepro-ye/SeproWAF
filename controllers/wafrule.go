@@ -156,7 +156,6 @@ func (c *WAFRuleController) CreateRule() {
 	userID := c.Ctx.Input.GetData("userID").(int)
 	userRole := c.Ctx.Input.GetData("userRole").(models.Role)
 
-	fmt.Println(c.Ctx.Input.RequestBody)
 	// Parse request body
 	var rule models.WAFRule
 	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &rule); err != nil {
@@ -167,10 +166,7 @@ func (c *WAFRuleController) CreateRule() {
 	}
 
 	// Get the site
-	fmt.Println(rule)
-	fmt.Println(rule.SiteID)
 	site, err := models.GetSiteByID(rule.SiteID)
-	fmt.Println(site)
 	if err != nil {
 		c.Ctx.Output.SetStatus(404)
 		c.Data["json"] = map[string]string{"error": "Site not found"}
