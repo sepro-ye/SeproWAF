@@ -19,7 +19,14 @@ ProxyHTTPSPort = 8443
 WAFRulesDir = rules/
 WAFLogDir = logs/waf
 
+# Database connection pool settings
+DBMaxIdleConns = 50
+DBMaxOpenConns = 100
+DBConnMaxLifetime = 300
+
 # WAF logging settings
 WAFLogBufferSize = 100
 WAFLogDetails = true
 WAFLogRetention = 30
+WAFLogBatchSize = 500
+WAFLogFlushInterval = 15

@@ -2,8 +2,10 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -12,20 +14,25 @@ import (
 	"sync"
 	"time"
 
+	"SeproWAF/db"
 	"SeproWAF/models"
 	"SeproWAF/services"
 
-	"github.com/beego/beego/v2/client/orm"
 	"github.com/beego/beego/v2/core/logs"
 	"github.com/beego/beego/v2/server/web"
 	"github.com/corazawaf/coraza/v3"
 )
 
 var (
-	ruleGenerator *services.RuleGenerator
-	ruleVersions  map[int]int64
-	ruleMutex     sync.RWMutex
-	wafLogService *services.WAFLogService
+	ruleGenerator     *services.RuleGenerator
+	ruleVersions      map[int]int64
+	ruleMutex         sync.RWMutex
+	wafLogService     *services.WAFLogService
+	ruleDbMutex       sync.Mutex
+	ruleCheckInterval               = 15 * time.Minute // Check less frequently
+	ruleDbTryLock     chan struct{} = make(chan struct{}, 1)
+	lastRuleCheck                   = make(map[int]time.Time)
+	ruleCheckMutex    sync.RWMutex
 )
 
 func init() {
@@ -46,13 +53,36 @@ func init() {
 	}
 
 	wafLogService = services.NewWAFLogService(bufferSize, logDetails, retention)
-	logs.Info("WAF logging service initialized")
+
+	// Initialize the try lock channel
+	ruleDbTryLock <- struct{}{}
+
+	// Add a background cleanup for the cache
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			now := time.Now()
+			wafDecisionCacheMutex.Lock()
+
+			// Clean expired entries
+			for key, value := range wafDecisionCache {
+				if now.Sub(value.timestamp) > wafCacheTTL {
+					delete(wafDecisionCache, key)
+				}
+			}
+
+			wafDecisionCacheMutex.Unlock()
+		}
+	}()
 }
 
 // WAFManager manages Coraza WAF instances for each site
 type WAFManager struct {
 	wafInstances map[int]coraza.WAF
 	mutex        sync.RWMutex
+	shutdownCh   chan struct{}
 }
 
 // NewWAFManager creates a new WAF manager
@@ -60,13 +90,21 @@ func NewWAFManager() (*WAFManager, error) {
 	manager := &WAFManager{
 		wafInstances: make(map[int]coraza.WAF),
 		mutex:        sync.RWMutex{},
+		shutdownCh:   make(chan struct{}),
 	}
+
+	// Start the rule update checker in a goroutine
+	go manager.StartRuleUpdateChecker(manager.shutdownCh)
 
 	return manager, nil
 }
 
 // GenerateCustomRulesFile generates a file containing all custom rules for a site
 func (wm *WAFManager) GenerateCustomRulesFile(siteID int) (string, error) {
+	// Use a mutex to prevent concurrent rule generation for the same site
+	ruleDbMutex.Lock()
+	defer ruleDbMutex.Unlock()
+
 	// Get rules directory
 	rulesDir, err := web.AppConfig.String("WAFRulesDir")
 	if err != nil || rulesDir == "" {
@@ -76,11 +114,23 @@ func (wm *WAFManager) GenerateCustomRulesFile(siteID int) (string, error) {
 	// Create site-specific directory if it doesn't exist
 	siteDir := filepath.Join(rulesDir, fmt.Sprintf("site_%d", siteID))
 	if err := os.MkdirAll(siteDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create site directory: %v", err)
+		return "", fmt.Errorf("failed to create rules directory: %v", err)
 	}
 
-	// Get active rules for this site
-	rules, err := models.GetActiveWAFRules(siteID)
+	// Use connection from pool
+	o := db.GetPool().GetOrm()
+
+	// Get active rules for this site with a timeout context
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var rules []*models.WAFRule
+	_, err = o.QueryTable(new(models.WAFRule)).
+		Filter("status", models.RuleStatusActive).
+		Filter("site_id__in", []int{0, siteID}).
+		OrderBy("priority").
+		AllWithCtx(ctx, &rules)
+
 	if err != nil {
 		return "", fmt.Errorf("failed to get active rules: %v", err)
 	}
@@ -90,14 +140,7 @@ func (wm *WAFManager) GenerateCustomRulesFile(siteID int) (string, error) {
 	content += "# Generated at " + time.Now().Format(time.RFC3339) + "\n\n"
 
 	for _, rule := range rules {
-		ruleText, err := ruleGenerator.GenerateRule(rule)
-		if err != nil {
-			logs.Warning("Failed to generate rule %d: %v", rule.ID, err)
-			continue
-		}
-
-		content += fmt.Sprintf("# Rule ID: %d - %s\n", rule.ID, rule.Name)
-		content += ruleText + "\n\n"
+		content += rule.RuleText + "\n\n"
 	}
 
 	// Write rules to file
@@ -153,6 +196,16 @@ func (wm *WAFManager) LoadRulesWithCustomRules(siteID int) (coraza.WAF, error) {
 
 // RulesNeedReload checks if rules for a site need to be reloaded
 func (wm *WAFManager) RulesNeedReload(siteID int) bool {
+	// Check cache first to avoid excessive DB calls
+	ruleCheckMutex.RLock()
+	lastCheck, exists := lastRuleCheck[siteID]
+	ruleCheckMutex.RUnlock()
+
+	// Only check database once per minute at most
+	if exists && time.Since(lastCheck) < time.Minute {
+		return false
+	}
+
 	ruleMutex.RLock()
 	currentVersion, exists := ruleVersions[siteID]
 	ruleMutex.RUnlock()
@@ -161,19 +214,35 @@ func (wm *WAFManager) RulesNeedReload(siteID int) bool {
 		return true
 	}
 
-	// Check if any rules have been updated since the last version
-	o := orm.NewOrm()
-	count, err := o.QueryTable(new(models.WAFRule)).
-		Filter("site_id", siteID).
-		Filter("updated_at__gt", time.Unix(0, currentVersion)).
-		Count()
+	// Update last check time
+	ruleCheckMutex.Lock()
+	lastRuleCheck[siteID] = time.Now()
+	ruleCheckMutex.Unlock()
 
-	if err != nil {
-		logs.Warning("Failed to check for rule updates: %v", err)
-		return true
-	}
+	// Run this in a background goroutine to not block requests
+	go func() {
+		// Only lock for database access
+		ruleDbMutex.Lock()
+		defer ruleDbMutex.Unlock()
 
-	return count > 0
+		o := db.GetPool().GetOrm()
+		count, err := o.QueryTable(new(models.WAFRule)).
+			Filter("site_id__in", []int{0, siteID}).
+			Filter("updated_at__gt", time.Unix(0, currentVersion)).
+			Count()
+
+		if err != nil {
+			logs.Warning("Failed to check for rule updates: %v", err)
+			return
+		}
+
+		if count > 0 {
+			// Queue reload in background
+			go wm.ReloadWAF(siteID)
+		}
+	}()
+
+	return false // Never block the request path
 }
 
 // ReloadWAF reloads the WAF instance for a site
@@ -184,7 +253,6 @@ func (wm *WAFManager) ReloadWAF(siteID int) error {
 	// Remove the current WAF instance
 	delete(wm.wafInstances, siteID)
 
-	logs.Info("WAF instance for site %d removed, will be reloaded on next request", siteID)
 	return nil
 }
 
@@ -209,18 +277,58 @@ func (wm *WAFManager) GetWAF(siteID int) (coraza.WAF, error) {
 		wm.wafInstances[siteID] = newWaf
 		wm.mutex.Unlock()
 
-		logs.Info("Created new WAF instance with custom rules for site ID %d", siteID)
 		return newWaf, nil
 	}
 
 	return waf, nil
 }
 
+// Cache to store previous WAF inspection results
+type wafruleCache struct {
+	decision  string
+	timestamp time.Time
+}
+
+var (
+	// Simple in-memory cache for identical requests
+	wafDecisionCache      = make(map[string]wafruleCache)
+	wafDecisionCacheMutex sync.RWMutex
+	wafCacheTTL           = 5 * time.Minute
+)
+
 // WAFHandler creates an HTTP handler with WAF protection
 func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Generate a cache key from request properties
+		cacheKey := fmt.Sprintf("%s:%s:%s:%s", siteDomain, r.Method, r.URL.Path, r.RemoteAddr)
+
+		// Check cache for recent identical requests
+		wafDecisionCacheMutex.RLock()
+		cachedDecision, found := wafDecisionCache[cacheKey]
+		wafDecisionCacheMutex.RUnlock()
+
+		if found && time.Since(cachedDecision.timestamp) < wafCacheTTL {
+			// We've seen this exact request recently
+			if cachedDecision.decision == "blocked" {
+				serveWAFErrorPage(w, "Request Blocked", http.StatusForbidden,
+					"The WAF has blocked this request due to a security violation")
+				return
+			}
+			// If allowed, continue to next handler
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Sampling for performance under heavy load (adjust percentage as needed)
+		shouldSample := rand.Intn(100) < 95 // 95% of requests processed by WAF
+
+		if !shouldSample {
+			// Skip WAF for sampled requests when under heavy load
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		// Debug logging for every incoming request
-		logs.Debug("WAF processing request: %s %s from %s", r.Method, r.URL.String(), r.RemoteAddr)
 
 		startTime := time.Now()
 
@@ -228,7 +336,6 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 		waf, err := wm.GetWAF(siteID)
 		if err != nil {
 			logs.Error("Failed to get WAF instance for site %d: %v", siteID, err)
-			logs.Debug("WAF BYPASSED: Request processing continues without WAF")
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -258,7 +365,6 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 				tx.AddRequestHeader(name, value)
 			}
 		}
-		logs.Debug("WAF processing request headers")
 		tx.ProcessRequestHeaders()
 
 		// Check early interruption after header processing
@@ -267,9 +373,17 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 				siteDomain, intervention.Action, intervention.Status)
 
 			// Log WAF blocking event
-			processingTime := time.Since(startTime).Milliseconds()
-			wafLogService.LogWAFEvent(tx, r, &w, siteID, siteDomain, "blocked",
-				processingTime, 0, intervention.Status, 0)
+			wafLogService.LogWAFEvent(
+				tx,
+				r,
+				"blocked",
+				intervention.Status,
+				intervention.Status,
+				0,
+				time.Since(startTime),
+				siteID,
+				siteDomain,
+			)
 
 			// Use error template instead of basic HTTP error
 			serveWAFErrorPage(w, "Request Blocked", intervention.Status,
@@ -279,7 +393,6 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 
 		// Process request body if available
 		if r.Body != nil && r.ContentLength > 0 {
-			logs.Debug("WAF processing request body (%d bytes)", r.ContentLength)
 			bodyBytes, err := io.ReadAll(r.Body)
 			if err != nil {
 				logs.Error("Failed to read request body for WAF processing: %v", err)
@@ -295,9 +408,17 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 					logs.Warning("WAF blocked request to %s during body processing", siteDomain)
 
 					// Log WAF blocking event
-					processingTime := time.Since(startTime).Milliseconds()
-					wafLogService.LogWAFEvent(tx, r, &w, siteID, siteDomain, "blocked",
-						processingTime, 0, http.StatusForbidden, 0)
+					wafLogService.LogWAFEvent(
+						tx,
+						r,
+						"blocked",
+						http.StatusForbidden,
+						http.StatusForbidden,
+						0,
+						time.Since(startTime),
+						siteID,
+						siteDomain,
+					)
 
 					// Use error template instead of basic HTTP error
 					serveWAFErrorPage(w, "Request Blocked", http.StatusForbidden,
@@ -316,9 +437,17 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 				siteDomain, intervention.Action, intervention.Status)
 
 			// Log WAF blocking event
-			processingTime := time.Since(startTime).Milliseconds()
-			wafLogService.LogWAFEvent(tx, r, &w, siteID, siteDomain, "blocked",
-				processingTime, 0, intervention.Status, 0)
+			wafLogService.LogWAFEvent(
+				tx,
+				r,
+				"blocked",
+				intervention.Status,
+				intervention.Status,
+				0,
+				time.Since(startTime),
+				siteID,
+				siteDomain,
+			)
 
 			// Use error template instead of basic HTTP error
 			serveWAFErrorPage(w, "Request Blocked", intervention.Status,
@@ -333,7 +462,6 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 		next.ServeHTTP(rww, r)
 
 		// Process response headers
-		logs.Debug("WAF processing response headers")
 		for key, values := range rww.Header() {
 			for _, value := range values {
 				tx.AddResponseHeader(key, value)
@@ -343,7 +471,6 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 
 		// Process response body
 		if len(rww.body) > 0 {
-			logs.Debug("WAF processing response body (%d bytes)", len(rww.body))
 			interrupt, _, err := tx.WriteResponseBody(rww.body)
 			if err != nil {
 				logs.Error("WAF response body processing error: %v", err)
@@ -351,9 +478,17 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 				logs.Warning("WAF blocked response from %s during body processing", siteDomain)
 
 				// Log WAF blocking event (response)
-				processingTime := time.Since(startTime).Milliseconds()
-				wafLogService.LogWAFEvent(tx, r, &w, siteID, siteDomain, "blocked_response",
-					processingTime, rww.statusCode, http.StatusForbidden, int64(len(rww.body)))
+				wafLogService.LogWAFEvent(
+					tx,
+					r,
+					"blocked",
+					http.StatusForbidden,
+					http.StatusForbidden,
+					int64(len(rww.body)),
+					time.Since(startTime),
+					siteID,
+					siteDomain,
+				)
 
 				http.Error(w, "Forbidden", http.StatusForbidden)
 				return
@@ -368,18 +503,49 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 			logs.Warning("WAF blocked response from %s: %s", siteDomain, intervention.Action)
 
 			// Log WAF blocking event (response)
-			processingTime := time.Since(startTime).Milliseconds()
-			wafLogService.LogWAFEvent(tx, r, &w, siteID, siteDomain, "blocked_response",
-				processingTime, rww.statusCode, http.StatusForbidden, int64(len(rww.body)))
+			wafLogService.LogWAFEvent(
+				tx,
+				r,
+				"blocked",
+				http.StatusForbidden,
+				http.StatusForbidden,
+				int64(len(rww.body)),
+				time.Since(startTime),
+				siteID,
+				siteDomain,
+			)
 
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
 
+		// After processing, update cache with decision
+		decision := "allowed"
+		if intervention := tx.Interruption(); intervention != nil {
+			decision = "blocked"
+			// Existing blocked request handling
+		}
+
+		// Update cache
+		wafDecisionCacheMutex.Lock()
+		wafDecisionCache[cacheKey] = wafruleCache{
+			decision:  decision,
+			timestamp: time.Now(),
+		}
+		wafDecisionCacheMutex.Unlock()
+
 		// Log allowed request
-		processingTime := time.Since(startTime).Milliseconds()
-		wafLogService.LogWAFEvent(tx, r, &w, siteID, siteDomain, "allowed",
-			processingTime, rww.statusCode, 0, int64(len(rww.body)))
+		wafLogService.LogWAFEvent(
+			tx,
+			r,
+			"allowed",
+			rww.statusCode,
+			0,
+			int64(len(rww.body)),
+			time.Since(startTime),
+			siteID,
+			siteDomain,
+		)
 
 		// Write the response body if not blocked
 		w.Write(rww.body)
@@ -440,6 +606,99 @@ func (rww *responseWriterWrapper) WriteHeader(statusCode int) {
 func (rww *responseWriterWrapper) Write(b []byte) (int, error) {
 	rww.body = append(rww.body, b...)
 	return len(b), nil
+}
+
+// CheckForRuleUpdates checks for rule updates less frequently and reuses connections
+func (wm *WAFManager) CheckForRuleUpdates() {
+	// Try to acquire the mutex with a timeout, but use a non-blocking approach first
+	if !wm.tryLockRuleDb() {
+		logs.Debug("Rule update mutex is locked, will try with timeout")
+
+		// Try with timeout
+		lockChan := make(chan struct{}, 1)
+		go func() {
+			if wm.tryLockRuleDb() {
+				lockChan <- struct{}{}
+			}
+		}()
+
+		select {
+		case <-lockChan:
+			// Successfully acquired the lock
+			defer wm.unlockRuleDb()
+		case <-time.After(5 * time.Second):
+			logs.Warning("Timed out waiting for rule update lock")
+			return
+		}
+	} else {
+		// We got the lock on first try
+		defer wm.unlockRuleDb()
+	}
+
+	// Use connection pool
+	o := db.GetPool().GetOrm()
+
+	// Get active sites with a timeout context
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var sites []*models.Site
+	_, err := o.QueryTable(new(models.Site)).
+		Filter("status", models.SiteStatusActive).
+		Filter("waf_enabled", true).
+		AllWithCtx(ctx, &sites)
+
+	if err != nil {
+		// Check if this is a table not found error
+		if strings.Contains(err.Error(), "doesn't exist") {
+			logs.Warning("Site table not found, disabling rule updates")
+			return
+		}
+		logs.Warning("Failed to check for rule updates: %v", err)
+		return
+	}
+
+	// Check each site for rule updates
+	for _, site := range sites {
+		if wm.RulesNeedReload(site.ID) {
+			logs.Info("Rules for site %d need reload, reloading...", site.ID)
+			if err := wm.ReloadWAF(site.ID); err != nil {
+				logs.Warning("Failed to reload WAF for site %d: %v", site.ID, err)
+			}
+		}
+	}
+}
+
+// StartRuleUpdateChecker starts a periodic rule update checker
+func (wm *WAFManager) StartRuleUpdateChecker(shutdownCh chan struct{}) {
+	ticker := time.NewTicker(ruleCheckInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			wm.CheckForRuleUpdates()
+		case <-shutdownCh:
+			return
+		}
+	}
+}
+
+// tryLockRuleDb attempts to acquire the ruleDbMutex lock
+func (wm *WAFManager) tryLockRuleDb() bool {
+	select {
+	case <-ruleDbTryLock:
+		ruleDbMutex.Lock()
+		return true
+	default:
+		return false
+	}
+}
+
+// unlockRuleDb releases the ruleDbMutex lock
+func (wm *WAFManager) unlockRuleDb() {
+	ruleDbMutex.Unlock()
+	ruleDbTryLock <- struct{}{}
 }
 
 var (

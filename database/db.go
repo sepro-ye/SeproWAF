@@ -19,7 +19,7 @@ func InitDatabase() error {
 	dbName, _ := web.AppConfig.String("MYSQL_DATABASE")
 
 	// Format: username:password@tcp(host:port)/dbname?charset=utf8&loc=Local
-	dsn := dbUser + ":" + dbPass + "@tcp(" + dbHost + ":" + dbPort + ")/" + dbName + "?charset=utf8&loc=Local"
+	dsn := dbUser + ":" + dbPass + "@tcp(" + dbHost + ":" + dbPort + ")/" + dbName + "?charset=utf8mb4&loc=Local"
 
 	// Ensure the database exists
 	if err := ensureDatabaseExists(dbUser, dbPass, dbHost, dbPort, dbName); err != nil {

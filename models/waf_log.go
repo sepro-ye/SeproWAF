@@ -18,7 +18,7 @@ type WAFLog struct {
 	QueryString     string `orm:"type(text);null"`
 	Protocol        string `orm:"size(20)"`
 	UserAgent       string `orm:"size(512)"`
-	Referer         string `orm:"size(1024);null"`
+	Referer         string `orm:"type(longtext);null"` // Change from size(1024) to type(text)
 	JA4Fingerprint  string `orm:"size(64);index;null"`
 	Action          string `orm:"size(20);index"` // allowed, blocked, monitored
 	StatusCode      int    `orm:"index"`
@@ -33,10 +33,11 @@ type WAFLog struct {
 
 // WAFLogDetail represents detailed information about a WAF log entry
 type WAFLogDetail struct {
-	ID         int    `orm:"auto;pk"`
-	WAFLogID   int    `orm:"index"`
-	DetailType string `orm:"size(50);index"` // request_headers, response_headers, request_body, response_body, rule_matches
-	Content    string `orm:"type(text)"`     // JSON-encoded content
+	ID            int64  `orm:"auto"`
+	WAFLogID      int64  `orm:"column(waf_log_id)"`
+	TransactionID string `orm:"column(transaction_id);size(64)"`
+	DetailType    string `orm:"column(detail_type);size(50)"`
+	Content       string `orm:"column(content);type(text)"`
 }
 
 func init() {

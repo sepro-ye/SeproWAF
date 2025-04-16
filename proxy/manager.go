@@ -45,7 +45,6 @@ func InitializeProxyServer() error {
 		}
 	}()
 
-	logs.Info("Reverse proxy server initialized (HTTP: %d, HTTPS: %d)", httpPort, httpsPort)
 	return nil
 }
 

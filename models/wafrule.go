@@ -7,6 +7,11 @@ import (
 	"github.com/beego/beego/v2/client/orm"
 )
 
+const (
+	RuleStatusActive   = 1 // Define the active status constant
+	RuleStatusInactive = 0 // Optionally define an inactive status constant
+)
+
 func init() {
 	orm.RegisterModel(new(WAFRule))
 }

@@ -163,7 +163,6 @@ func (c *WAFLogsController) GetLogDetails() {
 		c.ServeJSON()
 		return
 	}
-
 	c.Data["json"] = map[string]interface{}{
 		"success": true,
 		"log":     log,

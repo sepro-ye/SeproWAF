@@ -1,6 +1,7 @@
 package services
 
 import (
+	"SeproWAF/db"
 	"SeproWAF/models"
 	"encoding/json"
 	"fmt"
@@ -18,15 +19,20 @@ import (
 
 // WAFLogService handles logging for WAF events
 type WAFLogService struct {
-	logChan     chan *WAFLogEntry
-	wg          sync.WaitGroup
-	shutdown    chan struct{}
-	flushTicker *time.Ticker
-	buffer      []*WAFLogEntry
-	bufferMutex sync.Mutex
-	bufferSize  int
-	logDetails  bool // Whether to log detailed information like headers and bodies
-	retention   int  // Log retention in days
+	logChan      chan *WAFLogEntry
+	wg           sync.WaitGroup
+	shutdown     chan struct{}
+	flushTicker  *time.Ticker
+	buffer       []*WAFLogEntry
+	bufferMutex  sync.Mutex
+	bufferSize   int
+	logDetails   bool // Whether to log detailed information like headers and bodies
+	retention    int  // Log retention in days
+	logBatch     []*WAFLogEntry
+	batchMutex   sync.Mutex
+	batchTicker  *time.Ticker
+	batchSize    int
+	shuttingDown bool
 }
 
 // WAFLogEntry represents a log entry to be processed
@@ -44,24 +50,24 @@ type WAFLogEntry struct {
 	Timestamp      time.Time
 }
 
-// NewWAFLogService creates a new WAF logging service
-func NewWAFLogService(bufferSize int, logDetails bool, retention int) *WAFLogService {
-	if bufferSize <= 0 {
-		bufferSize = 100 // Default buffer size
-	}
-
-	if retention <= 0 {
-		retention = 30 // Default 30 days retention
+// Update the function signature to include better defaults
+func NewWAFLogService(retentionDays int, logDetails bool, bufferSize int) *WAFLogService {
+	if bufferSize < 500 {
+		bufferSize = 500 // Larger default batch size
 	}
 
 	service := &WAFLogService{
-		logChan:     make(chan *WAFLogEntry, 1000),
+		logChan:     make(chan *WAFLogEntry, 5000), // Larger channel buffer
 		shutdown:    make(chan struct{}),
-		flushTicker: time.NewTicker(10 * time.Second),
+		flushTicker: time.NewTicker(30 * time.Second), // Flush less frequently
 		buffer:      make([]*WAFLogEntry, 0, bufferSize),
 		bufferSize:  bufferSize,
 		logDetails:  logDetails,
-		retention:   retention,
+		retention:   retentionDays,
+		logBatch:    make([]*WAFLogEntry, 0, bufferSize),
+		batchMutex:  sync.Mutex{},
+		batchTicker: time.NewTicker(15 * time.Second), // Process batches less frequently
+		batchSize:   bufferSize,
 	}
 
 	// Start background workers
@@ -69,37 +75,38 @@ func NewWAFLogService(bufferSize int, logDetails bool, retention int) *WAFLogSer
 	go service.processLogs()
 
 	service.wg.Add(1)
-	go service.runRetentionPolicy()
+	go service.runRetentionPolicy(retentionDays)
+
+	// Start the batch processing goroutine
+	go service.processBatches()
 
 	return service
 }
 
 // LogWAFEvent logs a WAF event asynchronously
-func (s *WAFLogService) LogWAFEvent(tx txtype.Transaction, r *http.Request,
-	w *http.ResponseWriter, siteID int, domain string, action string,
-	processingTime int64, statusCode, blockStatus int, responseSize int64) {
-
+func (s *WAFLogService) LogWAFEvent(tx txtype.Transaction, req *http.Request, action string, statusCode int, blockStatus int, responseSize int64, processingTime time.Duration, siteID int, domain string) {
 	entry := &WAFLogEntry{
 		Transaction:    tx,
-		Request:        r,
-		Response:       w,
-		SiteID:         siteID,
-		Domain:         domain,
+		Request:        req,
 		Action:         action,
-		ProcessingTime: processingTime,
 		StatusCode:     statusCode,
 		BlockStatus:    blockStatus,
 		ResponseSize:   responseSize,
+		ProcessingTime: int64(processingTime),
+		SiteID:         siteID,
+		Domain:         domain,
 		Timestamp:      time.Now(),
 	}
 
-	// Try to send to channel, but don't block if channel is full
-	select {
-	case s.logChan <- entry:
-		// Sent successfully
-	default:
-		logs.Warning("WAF log channel is full, dropping log entry")
+	s.batchMutex.Lock()
+	s.logBatch = append(s.logBatch, entry)
+
+	// If we've reached batch size, signal immediate processing
+	if len(s.logBatch) >= s.batchSize {
+		// Process in a separate goroutine to avoid blocking
+		go s.flushBatch()
 	}
+	s.batchMutex.Unlock()
 }
 
 // processLogs handles log entries from the channel
@@ -167,7 +174,7 @@ func (s *WAFLogService) flushLogs(entries []*WAFLogEntry) {
 		// Insert details if enabled
 		if s.logDetails && len(details) > 0 {
 			for _, detail := range details {
-				detail.WAFLogID = log.ID
+				detail.WAFLogID = int64(log.ID)
 				_, err := o.Insert(detail)
 				if err != nil {
 					logs.Error("Failed to insert WAF log detail: %v", err)
@@ -184,7 +191,171 @@ func (s *WAFLogService) flushLogs(entries []*WAFLogEntry) {
 		return
 	}
 
-	logs.Info("Successfully flushed %d WAF logs", len(entries))
+}
+
+// flushBatch processes and writes batched logs to the database
+func (s *WAFLogService) flushBatch() {
+	s.batchMutex.Lock()
+	if len(s.logBatch) == 0 {
+		s.batchMutex.Unlock()
+		return
+	}
+
+	// Use a much larger batch size for bulk inserts
+	currentBatch := s.logBatch
+	s.logBatch = make([]*WAFLogEntry, 0, s.batchSize)
+	s.batchMutex.Unlock()
+
+	// Process in a worker goroutine
+	go s.processBatchInWorker(currentBatch)
+}
+
+// New method for worker-based batch processing
+func (s *WAFLogService) processBatchInWorker(entries []*WAFLogEntry) {
+	if len(entries) == 0 {
+		return
+	}
+
+	// Get connection from pool
+	o := db.GetPool().GetOrm()
+
+	// Use bulk insert instead of individual inserts
+	tx, err := o.Begin()
+	if err != nil {
+		logs.Error("Failed to begin transaction for WAF log batch: %v", err)
+		return
+	}
+
+	// Prepare bulk insert SQL
+	bulkLogs := make([]orm.Params, 0, len(entries))
+	var bulkDetails []*models.WAFLogDetail
+
+	for _, entry := range entries {
+		log, details := s.createLogObjects(entry)
+
+		// Truncate fields that might cause issues
+		if len(log.Referer) > 255 {
+			log.Referer = log.Referer[:252] + "..."
+		}
+
+		// Validate processing time is in range
+		if log.ProcessingTime > 2147483647 {
+			log.ProcessingTime = 2147483647
+		} else if log.ProcessingTime < 0 {
+			log.ProcessingTime = 0
+		}
+
+		// Add to bulk insert params
+		bulkLogs = append(bulkLogs, orm.Params{
+			"transaction_id":    log.TransactionID,
+			"site_id":           log.SiteID,
+			"domain":            log.Domain,
+			"client_ip":         log.ClientIP,
+			"method":            log.Method,
+			"uri":               log.URI,
+			"query_string":      log.QueryString,
+			"protocol":          log.Protocol,
+			"user_agent":        log.UserAgent,
+			"referer":           log.Referer,
+			"ja4_fingerprint":   log.JA4Fingerprint,
+			"action":            log.Action,
+			"status_code":       log.StatusCode,
+			"block_status_code": log.BlockStatusCode,
+			"response_size":     log.ResponseSize,
+			"matched_rules":     log.MatchedRules,
+			"severity":          log.Severity,
+			"category":          log.Category,
+			"processing_time":   log.ProcessingTime,
+			"created_at":        time.Now(),
+		})
+
+		// Add details if needed and enabled
+		// Skip this for performance if not needed
+		if s.logDetails && len(details) > 0 && len(entries) < 1000 {
+			bulkDetails = append(bulkDetails, details...)
+		}
+	}
+
+	// An alternative approach using models
+	var logRecords []*models.WAFLog // Define the variable with the appropriate type
+	if len(bulkLogs) > 0 {
+		// Change variable name from 'logs' to 'logRecords' to avoid conflict with beego/logs
+		// Insert the logs and get the records back
+		logRecords = make([]*models.WAFLog, len(bulkLogs))
+		for i, log := range bulkLogs {
+			// Create model instance
+			logRecords[i] = &models.WAFLog{
+				SiteID:          log["site_id"].(int),
+				TransactionID:   log["transaction_id"].(string),
+				Domain:          log["domain"].(string),
+				ClientIP:        log["client_ip"].(string),
+				Method:          log["method"].(string),
+				URI:             log["uri"].(string),
+				QueryString:     log["query_string"].(string),
+				Protocol:        log["protocol"].(string),
+				UserAgent:       log["user_agent"].(string),
+				Referer:         log["referer"].(string),
+				JA4Fingerprint:  log["ja4_fingerprint"].(string),
+				Action:          log["action"].(string),
+				StatusCode:      log["status_code"].(int),
+				BlockStatusCode: log["block_status_code"].(int),
+				ResponseSize:    log["response_size"].(int64),
+				MatchedRules:    log["matched_rules"].(string),
+				Severity:        log["severity"].(string),
+				Category:        log["category"].(string),
+				ProcessingTime:  log["processing_time"].(int),
+				CreatedAt:       log["created_at"].(time.Time),
+			}
+		}
+
+		_, err := tx.InsertMulti(len(logRecords), logRecords)
+		if err != nil {
+			logs.Error("Failed to bulk insert WAF logs: %v", err)
+			tx.Rollback()
+			return
+		}
+	}
+
+	// Execute bulk insert for details
+	if len(bulkDetails) > 0 {
+		// First, we need to link the details to their parent logs
+		// We need to get the IDs of the newly inserted logs
+		for _, detail := range bulkDetails {
+			// Find the corresponding log by transaction ID
+			for _, logRecord := range logRecords {
+				if detail.TransactionID == logRecord.TransactionID {
+					detail.WAFLogID = int64(logRecord.ID)
+					break
+				}
+			}
+		}
+
+		// Now insert the details
+		_, err := tx.InsertMulti(len(bulkDetails), bulkDetails)
+		if err != nil {
+			logs.Warning("Failed to insert WAF log details: %v", err)
+			// Continue execution even if details insertion fails
+		} else {
+			logs.Debug("Successfully inserted %d WAF log details", len(bulkDetails))
+		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		logs.Error("Failed to commit transaction for WAF log batch: %v", err)
+		tx.Rollback()
+	}
+}
+
+// processBatches handles batch processing periodically
+func (s *WAFLogService) processBatches() {
+	for range s.batchTicker.C {
+		if s.shuttingDown {
+			return
+		}
+
+		s.flushBatch()
+	}
 }
 
 // createLogObjects creates log and detail objects from entry
@@ -386,16 +557,18 @@ func (s *WAFLogService) createLogObjects(entry *WAFLogEntry) (*models.WAFLog, []
 	if s.logDetails {
 		if headers, err := json.Marshal(req.Header); err == nil {
 			details = append(details, &models.WAFLogDetail{
-				DetailType: "request_headers",
-				Content:    string(headers),
+				DetailType:    "request_headers",
+				Content:       string(headers),
+				TransactionID: log.TransactionID,
 			})
 		}
 
 		if len(ruleMatches) > 0 {
 			if matchBytes, err := json.Marshal(ruleMatches); err == nil {
 				details = append(details, &models.WAFLogDetail{
-					DetailType: "rule_matches",
-					Content:    string(matchBytes),
+					DetailType:    "rule_matches",
+					Content:       string(matchBytes),
+					TransactionID: log.TransactionID,
 				})
 			}
 		}
@@ -504,7 +677,7 @@ func extractCategoryFromTags(tags []string) string {
 }
 
 // runRetentionPolicy removes old logs periodically
-func (s *WAFLogService) runRetentionPolicy() {
+func (s *WAFLogService) runRetentionPolicy(retentionDays int) {
 	defer s.wg.Done()
 
 	ticker := time.NewTicker(24 * time.Hour) // Run once per day
@@ -513,7 +686,7 @@ func (s *WAFLogService) runRetentionPolicy() {
 	for {
 		select {
 		case <-ticker.C:
-			s.cleanupOldLogs()
+			s.cleanupOldLogs(retentionDays)
 		case <-s.shutdown:
 			return
 		}
@@ -521,8 +694,8 @@ func (s *WAFLogService) runRetentionPolicy() {
 }
 
 // cleanupOldLogs removes logs older than retention days
-func (s *WAFLogService) cleanupOldLogs() {
-	cutoffDate := time.Now().AddDate(0, 0, -s.retention)
+func (s *WAFLogService) cleanupOldLogs(retentionDays int) {
+	cutoffDate := time.Now().AddDate(0, 0, -retentionDays)
 
 	o := orm.NewOrm()
 
@@ -540,15 +713,19 @@ func (s *WAFLogService) cleanupOldLogs() {
 	}
 
 	if rowsAffected, err := res.RowsAffected(); err == nil && rowsAffected > 0 {
-		logs.Info("Deleted %d WAF logs older than %d days", rowsAffected, s.retention)
 	}
 }
 
 // Shutdown gracefully shuts down the logging service
 func (s *WAFLogService) Shutdown() {
+	s.shuttingDown = true
+	s.batchTicker.Stop()
+
+	// Flush any remaining logs
+	s.flushBatch()
+
 	close(s.shutdown)
 	s.wg.Wait()
-	logs.Info("WAF logging service shut down")
 }
 
 // QueryLogs retrieves logs with filters
@@ -589,7 +766,7 @@ func GetWAFLogService() *WAFLogService {
 	wafLogServiceOnce.Do(func() {
 		// Use configuration values or defaults
 		bufferSize := 100
-		logDetails := true // Change this to true to always enable detailed logging
+		logDetails := true
 		retention := 30
 
 		// Try to read from config if available
@@ -603,7 +780,8 @@ func GetWAFLogService() *WAFLogService {
 			retention = retentionConfig
 		}
 
-		wafLogServiceInstance = NewWAFLogService(bufferSize, logDetails, retention)
+		// Pass bufferSize as third parameter
+		wafLogServiceInstance = NewWAFLogService(retention, logDetails, bufferSize)
 	})
 	return wafLogServiceInstance
 }

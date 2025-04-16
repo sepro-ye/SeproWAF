@@ -237,7 +237,6 @@ document.addEventListener('DOMContentLoaded', function() {
     async function loadLogDetails(id) {
         try {
             const response = await api.get(`/waf/logs/${id}`);
-            
             // Hide loading, show content
             document.getElementById('log-loading').classList.add('hidden');
             
@@ -355,7 +354,6 @@ document.addEventListener('DOMContentLoaded', function() {
         details.forEach(detail => {
             try {
                 const content = JSON.parse(detail.Content);
-                
                 switch (detail.DetailType) {
                     case 'request_headers':
                         renderHeaders('request-headers-content', content);

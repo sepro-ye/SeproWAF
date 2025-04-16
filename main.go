@@ -3,6 +3,7 @@ package main
 import (
 	"SeproWAF/controllers"
 	"SeproWAF/database"
+	"SeproWAF/db"
 	"SeproWAF/models"
 	"SeproWAF/proxy"
 	_ "SeproWAF/routers"
@@ -27,6 +28,26 @@ func init() {
 		logs.Critical("Failed to migrate database: %v", err)
 		panic(err)
 	}
+
+	// Initialize the database connection pool
+	pool := db.GetPool()
+
+	// Configure based on app.conf settings
+	maxIdle, _ := beego.AppConfig.Int("DBMaxIdleConns")
+	maxOpen, _ := beego.AppConfig.Int("DBMaxOpenConns")
+	maxLifetime, _ := beego.AppConfig.Int("DBConnMaxLifetime")
+
+	if maxIdle <= 0 {
+		maxIdle = 50
+	}
+	if maxOpen <= 0 {
+		maxOpen = 100
+	}
+	if maxLifetime <= 0 {
+		maxLifetime = 300
+	}
+
+	pool.ConfigurePool(maxIdle, maxOpen, time.Duration(maxLifetime)*time.Second)
 
 	// Schedule token cleanup
 	go func() {

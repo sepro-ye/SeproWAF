@@ -68,7 +68,8 @@ Use the `wafdb` tool to initialize and manage the database.
 
 1. **Run migrations**
    ```bash
-   go run cmd/wafdb/main.go --migrate
+   cd cmd/wafdb
+   go run main.go --migrate
    ```
 
 2. **Create an admin user**

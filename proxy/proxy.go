@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"SeproWAF/db"
 	"SeproWAF/models"
 	"context"
 	"crypto/tls"
@@ -21,17 +22,19 @@ import (
 
 // ProxyServer represents the reverse proxy server
 type ProxyServer struct {
-	httpServer  *http.Server
-	httpsServer *http.Server
-	domainMap   map[string]*SiteProxy
-	mapMutex    sync.RWMutex
-	httpPort    int
-	httpsPort   int
-	certManager *CertificateManager
-	defaultHost string
-	tlsConfig   *tls.Config
-	wafManager  *WAFManager // Added WAF manager
-
+	httpServer        *http.Server
+	httpsServer       *http.Server
+	domainMap         map[string]*SiteProxy
+	mapMutex          sync.RWMutex
+	httpPort          int
+	httpsPort         int
+	certManager       *CertificateManager
+	defaultHost       string
+	tlsConfig         *tls.Config
+	wafManager        *WAFManager   // Added WAF manager
+	requestCounters   map[int]int64 // Maps site ID to request count
+	countersMutex     sync.Mutex
+	counterUpdateTick *time.Ticker // Update DB every 30 seconds
 }
 
 // SiteProxy represents a site's proxy configuration
@@ -138,7 +141,6 @@ func (cm *CertificateManager) AddCertificate(domain string, cert *tls.Certificat
 	defer cm.mutex.Unlock()
 
 	cm.certificates[domain] = cert
-	logs.Info("Added certificate for domain: %s", domain)
 }
 
 // RemoveCertificate removes a certificate from the manager
@@ -147,7 +149,6 @@ func (cm *CertificateManager) RemoveCertificate(domain string) {
 	defer cm.mutex.Unlock()
 
 	delete(cm.certificates, domain)
-	logs.Info("Removed certificate for domain: %s", domain)
 }
 
 // NewProxyServer creates a new proxy server
@@ -177,15 +178,21 @@ func NewProxyServer(httpPort, httpsPort int) *ProxyServer {
 	}
 
 	server := &ProxyServer{
-		domainMap:   make(map[string]*SiteProxy),
-		mapMutex:    sync.RWMutex{},
-		httpPort:    httpPort,
-		httpsPort:   httpsPort,
-		certManager: certManager,
-		defaultHost: "localhost",
-		tlsConfig:   tlsConfig,
-		wafManager:  wafManager,
+		domainMap:         make(map[string]*SiteProxy),
+		mapMutex:          sync.RWMutex{},
+		httpPort:          httpPort,
+		httpsPort:         httpsPort,
+		certManager:       certManager,
+		defaultHost:       "localhost",
+		tlsConfig:         tlsConfig,
+		wafManager:        wafManager,
+		requestCounters:   make(map[int]int64),
+		countersMutex:     sync.Mutex{},
+		counterUpdateTick: time.NewTicker(30 * time.Second), // Update DB every 30 seconds
 	}
+
+	// Start the counter update goroutine
+	go server.updateRequestCounters()
 
 	// Create HTTP server
 	server.httpServer = &http.Server{
@@ -219,7 +226,6 @@ func (ps *ProxyServer) Start() error {
 
 	// Start HTTP server in a goroutine
 	go func() {
-		logs.Info("Starting HTTP proxy server on port %d", ps.httpPort)
 		if err := ps.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logs.Error("HTTP server error: %v", err)
 		}
@@ -233,14 +239,11 @@ func (ps *ProxyServer) Start() error {
 	if hasCertificates {
 		// Start HTTPS server in a goroutine - make it non-fatal if it fails
 		go func() {
-			logs.Info("Starting HTTPS proxy server on port %d", ps.httpsPort)
 			if err := ps.httpsServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
 				logs.Error("HTTPS server error: %v", err)
 				logs.Warning("HTTPS server failed to start. SSL functionality will be unavailable.")
 			}
 		}()
-	} else {
-		logs.Info("No certificates available - HTTPS server not started")
 	}
 
 	return nil
@@ -248,15 +251,16 @@ func (ps *ProxyServer) Start() error {
 
 // Stop stops the proxy server
 func (ps *ProxyServer) Stop() error {
+	// Stop the counter ticker
+	ps.counterUpdateTick.Stop()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	logs.Info("Stopping HTTP proxy server")
 	if err := ps.httpServer.Shutdown(ctx); err != nil {
 		logs.Error("HTTP server shutdown error: %v", err)
 	}
 
-	logs.Info("Stopping HTTPS proxy server")
 	if err := ps.httpsServer.Shutdown(ctx); err != nil {
 		logs.Error("HTTPS server shutdown error: %v", err)
 		return err
@@ -319,7 +323,6 @@ func (ps *ProxyServer) MonitorCertificates() {
 				if hasCertificates {
 					// Start HTTPS server
 					go func() {
-						logs.Info("Certificates available - starting HTTPS proxy server on port %d", ps.httpsPort)
 						if err := ps.httpsServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
 							logs.Error("HTTPS server error: %v", err)
 							logs.Warning("HTTPS server failed to start. SSL functionality will be unavailable.")
@@ -369,31 +372,14 @@ func (ps *ProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			target += "?" + r.URL.RawQuery
 		}
 
-		logs.Info("Redirecting HTTP request to HTTPS: %s -> %s", r.URL.String(), target)
 		http.Redirect(w, r, target, http.StatusMovedPermanently)
 		return
 	}
 
-	// Update request count
-	go func(siteID int) {
-		site := &models.Site{ID: siteID}
-		o := orm.NewOrm()
-		if err := o.Read(site); err != nil {
-			logs.Error("Failed to read site %d: %v", siteID, err)
-			return
-		}
-		site.RequestCount++
-		if _, err := o.Update(site, "RequestCount"); err != nil {
-			logs.Error("Failed to update request count for site %d: %v", siteID, err)
-		}
-	}(siteProxy.Site.ID)
-
-	// Apply WAF if enabled for this site and WAF manager is available
-	// if siteProxy.WAFEnabled && ps.wafManager != nil {
-	// 	wafHandler := ps.wafManager.WAFHandler(siteProxy.ReverseProxy, siteProxy.Site.ID, siteProxy.Site.Domain)
-	// 	wafHandler.ServeHTTP(w, r)
-	// 	return
-	// }
+	// Instead of creating a DB connection for every request, just increment the counter
+	ps.countersMutex.Lock()
+	ps.requestCounters[siteProxy.Site.ID]++
+	ps.countersMutex.Unlock()
 
 	// Apply WAF if enabled for this site and WAF manager is available
 	if siteProxy.WAFEnabled && ps.wafManager != nil {
@@ -464,7 +450,6 @@ func (ps *ProxyServer) AddOrUpdateSite(site *models.Site) error {
 				ps.certManager.AddCertificate(site.Domain, &tlsCert)
 				useHTTPS = true
 				certificate = cert
-				logs.Info("Using SSL certificate for domain: %s", site.Domain)
 			} else {
 				logs.Warning("Failed to parse certificate for %s: %v - HTTPS will be disabled", site.Domain, err)
 			}
@@ -488,7 +473,6 @@ func (ps *ProxyServer) AddOrUpdateSite(site *models.Site) error {
 	ps.domainMap[site.Domain] = siteProxy
 	ps.mapMutex.Unlock()
 
-	logs.Info("Added/updated site in proxy: %s -> %s (HTTPS: %t)", site.Domain, site.TargetURL, useHTTPS)
 	return nil
 }
 
@@ -504,6 +488,66 @@ func (ps *ProxyServer) RemoveSite(domain string) {
 		}
 
 		delete(ps.domainMap, domain)
-		logs.Info("Removed site from proxy: %s", domain)
+	}
+}
+
+// Replace the updateRequestCounters method with this version
+
+func (ps *ProxyServer) updateRequestCounters() {
+	for range ps.counterUpdateTick.C {
+		ps.countersMutex.Lock()
+		counters := make(map[int]int64)
+		for siteID, count := range ps.requestCounters {
+			counters[siteID] = count
+			ps.requestCounters[siteID] = 0 // Reset counter
+		}
+		ps.countersMutex.Unlock()
+
+		if len(counters) == 0 {
+			continue
+		}
+
+		// Use connection pool
+		o := db.GetPool().GetOrm()
+
+		// Check if site table exists before attempting update
+		tableExists := false
+		err := o.Raw("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'site'").QueryRow(&tableExists)
+		if err != nil || !tableExists {
+			// Log once instead of spamming logs
+			logs.Warning("Site table doesn't exist in database, disabling request count updates")
+
+			// Disable periodic updates by stopping and nullifying the ticker
+			ps.counterUpdateTick.Stop()
+			ps.counterUpdateTick = nil
+			return
+		}
+
+		// Use a single transaction for all updates
+		tx, err := o.Begin()
+		if err != nil {
+			logs.Error("Failed to begin transaction for request counts: %v", err)
+			continue
+		}
+
+		success := true
+		for siteID, count := range counters {
+			_, err := tx.Raw("UPDATE site SET request_count = request_count + ? WHERE id = ?", count, siteID).Exec()
+			if err != nil {
+				logs.Error("Failed to update request count for site %d: %v", siteID, err)
+				success = false
+				break
+			}
+		}
+
+		if success {
+			err = tx.Commit()
+			if err != nil {
+				logs.Error("Failed to commit request count updates: %v", err)
+				tx.Rollback()
+			}
+		} else {
+			tx.Rollback()
+		}
 	}
 }

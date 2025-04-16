@@ -22,14 +22,14 @@ type Site struct {
 	Domain            string     `orm:"size(255);unique"`
 	TargetURL         string     `orm:"size(255)"` // Backend server URL to proxy to
 	Status            SiteStatus `orm:"size(16);default(pending)"`
-	UserID            int        `orm:"column(user_id)"`                  // Owner of the site
-	RequestCount      int64      `orm:"default(0)"`                       // Total requests processed
-	BlockedCount      int64      `orm:"default(0)"`                       // Total requests blocked
-	WAFEnabled        bool       `orm:"default(true)"`                    // Whether WAF protection is enabled
-	CertificateID     *int       `orm:"column(certificate_id);null"`      // SSL certificate ID (if any)
-	CustomRulesIDs    string     `orm:"column(custom_rules_ids);null"`    // Comma-separated list of custom rule IDs
-	EnabledRulesetIDs string     `orm:"column(enabled_ruleset_ids);null"` // Comma-separated list of enabled ruleset IDs
-	Settings          string     `orm:"type(text);null"`                  // JSON-encoded settings
+	UserID            int        `orm:"column(user_id)"`                   // Owner of the site
+	RequestCount      int64      `orm:"default(0)"`                        // Total requests processed
+	BlockedCount      int64      `orm:"default(0)"`                        // Total requests blocked
+	WAFEnabled        bool       `orm:"column(waf_enabled);default(true)"` // Whether WAF protection is enabled
+	CertificateID     *int       `orm:"column(certificate_id);null"`       // SSL certificate ID (if any)
+	CustomRulesIDs    string     `orm:"column(custom_rules_ids);null"`     // Comma-separated list of custom rule IDs
+	EnabledRulesetIDs string     `orm:"column(enabled_ruleset_ids);null"`  // Comma-separated list of enabled ruleset IDs
+	Settings          string     `orm:"type(text);null"`                   // JSON-encoded settings
 	CreatedAt         time.Time  `orm:"auto_now_add"`
 	UpdatedAt         time.Time  `orm:"auto_now"`
 }

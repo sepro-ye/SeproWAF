@@ -34,6 +34,12 @@ func (c *UIController) Dashboard() {
 	// Try to get user from Authorization header first
 	user := c.GetUserFromJWT()
 
+	if user == nil {
+		// If not found, redirect to login page
+		c.Ctx.Redirect(302, "/auth/login")
+		return
+	}
+
 	// User is authenticated
 	c.Data["Title"] = "Dashboard"
 	c.Data["Username"] = user.Username
@@ -48,7 +54,7 @@ func (c *UIController) UserProfile() {
 	// Get authenticated user with the more complete method
 	user := c.GetUserFromJWT()
 	if user == nil {
-		c.Ctx.Redirect(302, "/auth/login")
+		c.Redirect("/auth/login", 302)
 		return
 	}
 
@@ -106,6 +112,11 @@ func (c *UIController) SiteList() {
 
 // SiteDetail renders the site detail page
 func (c *UIController) SiteDetail() {
+	user := c.GetUserFromJWT()
+	if user == nil {
+		c.Redirect("/auth/login", 302)
+		return
+	}
 	// Get site ID from URL parameter
 	siteIDStr := c.Ctx.Input.Param(":id")
 	siteID, err := strconv.Atoi(siteIDStr)
@@ -231,6 +242,11 @@ func (c *UIController) CertificateUpload() {
 
 // WAFRuleList shows the WAF rules for a site
 func (c *UIController) WAFRuleList() {
+	user := c.GetUserFromJWT()
+	if user == nil {
+		c.Redirect("/auth/login", 302)
+		return
+	}
 	// Get site ID from URL parameter
 	siteIDStr := c.Ctx.Input.Param(":id")
 	siteID, err := strconv.Atoi(siteIDStr)
@@ -255,6 +271,11 @@ func (c *UIController) WAFRuleList() {
 
 // WAFRuleCreate shows the form to create a new WAF rule
 func (c *UIController) WAFRuleCreate() {
+	user := c.GetUserFromJWT()
+	if user == nil {
+		c.Redirect("/auth/login", 302)
+		return
+	}
 	// Get site ID from URL parameter
 	siteIDStr := c.Ctx.Input.Param(":id")
 	siteID, err := strconv.Atoi(siteIDStr)
@@ -280,6 +301,11 @@ func (c *UIController) WAFRuleCreate() {
 
 // WAFRuleEdit shows the form to edit an existing WAF rule
 func (c *UIController) WAFRuleEdit() {
+	user := c.GetUserFromJWT()
+	if user == nil {
+		c.Redirect("/auth/login", 302)
+		return
+	}
 	// Get site ID and rule ID from URL parameters
 	siteIDStr := c.Ctx.Input.Param(":id")
 	ruleIDStr := c.Ctx.Input.Param(":ruleId")
@@ -328,6 +354,12 @@ func (c *UIController) WAFRuleEdit() {
 
 // WAFLogsList renders the WAF logs list page
 func (c *UIController) WAFLogsList() {
+	user := c.GetUserFromJWT()
+	if user == nil {
+		c.Redirect("/auth/login", 302)
+		return
+	}
+
 	c.Data["Title"] = "WAF Security Logs"
 	c.Data["ActiveMenu"] = "waf_logs"
 	c.Layout = "layout.tpl"
@@ -336,6 +368,12 @@ func (c *UIController) WAFLogsList() {
 
 // WAFLogDetail renders the WAF log detail page
 func (c *UIController) WAFLogDetail() {
+	user := c.GetUserFromJWT()
+	if user == nil {
+		c.Redirect("/auth/login", 302)
+		return
+	}
+
 	c.Data["Title"] = "Security Log Details"
 	c.Data["ActiveMenu"] = "waf_logs"
 
@@ -532,8 +570,6 @@ func (c *UIController) GetToken() string {
 	}
 
 	// Log the headers and cookies for debugging
-	logs.Debug("Headers: %v", c.Ctx.Request.Header)
-	logs.Debug("Cookies: %v", c.Ctx.Request.Cookies())
 
 	// No valid token found
 	return ""
@@ -578,50 +614,13 @@ func (c *UIController) GetUserFromToken(tokenString string) *models.User {
 	return &user
 }
 
-// DisplaySettings renders the settings page with current settings data
-func (c *UIController) DisplaySettings() {
-	// Fetch settings from the database or configuration
-	settings := models.Settings{
-		General: models.GeneralSettings{
-			SiteName: "SeproWAF",
-			Language: "en",
-			Theme:    "default",
-			RunMode:  "production",
-		},
-		Profile: models.ProfileSettings{
-			FullName:       "Admin User",
-			Username:       "admin",
-			Email:          "admin@example.com",
-			ProfilePicture: "/static/images/default-profile.png",
-			Bio:            "Administrator of SeproWAF",
-		},
-	}
-
-	// Pass settings to the template
-	c.Data["Settings"] = settings
-	c.Data["Title"] = "Settings"
-	c.Layout = "layout.tpl"
-	c.TplName = "settings/settings.tpl"
-}
-
-// UpdateSettings handles the form submission to update settings
-func (c *UIController) UpdateSettings() {
-	// Parse form data
-	var updatedSettings models.Settings
-	if err := c.ParseForm(&updatedSettings); err != nil {
-		c.CustomAbort(400, "Invalid form data")
+func (c *UIController) Settings() {
+	user := c.GetUserFromJWT()
+	if user == nil {
+		c.Redirect("/auth/login", 302)
 		return
 	}
-
-	// Save updated settings to the database or configuration
-	// Example: SaveSettingsToDB(updatedSettings)
-
-	// Redirect back to the settings page
-	c.Redirect("/settings", 302)
-}
-
-func (c *UIController) Settings() {
-
+	c.Data["Title"] = "Settings"
 	c.Layout = "layout.tpl"
 	c.TplName = "settings/settings.tpl"
 }
