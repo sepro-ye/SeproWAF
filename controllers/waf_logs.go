@@ -35,19 +35,24 @@ func (c *WAFLogsController) GetLogs() {
 	var startTime, endTime time.Time
 	var err error
 	if startDate != "" {
-		startTime, err = time.Parse("2006-01-02", startDate)
+		startTime, err = time.Parse(time.RFC3339, startDate)
 		if err != nil {
-			c.Data["json"] = map[string]interface{}{
-				"success": false,
-				"message": "Invalid start date format. Use YYYY-MM-DD",
+
+			// Try fallback to simple date format if ISO format fails
+			startTime, err = time.Parse("2006-01-02", startDate)
+			if err != nil {
+				c.Data["json"] = map[string]interface{}{
+					"success": false,
+					"message": "Invalid start date format. Use YYYY-MM-DD or ISO format",
+				}
+				c.ServeJSON()
+				return
 			}
-			c.ServeJSON()
-			return
 		}
 	}
 
 	if endDate != "" {
-		endTime, err = time.Parse("2006-01-02", endDate)
+		endTime, err = time.Parse(time.RFC3339, endDate)
 		if err != nil {
 			c.Data["json"] = map[string]interface{}{
 				"success": false,
@@ -93,10 +98,10 @@ func (c *WAFLogsController) GetLogs() {
 
 	// Add date range filters
 	if !startTime.IsZero() {
-		filters["created_at__gte"] = startTime
+		filters["start_date"] = startTime // Changed from "created_at" to "start_date"
 	}
 	if !endTime.IsZero() {
-		filters["created_at__lte"] = endTime
+		filters["end_date"] = endTime // Changed from "created_at" to "end_date"
 	}
 
 	// Query logs
@@ -154,7 +159,7 @@ func (c *WAFLogsController) GetLogDetails() {
 
 	// Get details if they exist
 	var details []*models.WAFLogDetail
-	_, err = o.QueryTable(new(models.WAFLogDetail)).Filter("WAFLogID", id).All(&details)
+	_, err = o.QueryTable(new(models.WAFLogDetail)).Filter("waf_log_id", id).All(&details)
 	if err != nil {
 		c.Data["json"] = map[string]interface{}{
 			"success": false,
@@ -201,14 +206,18 @@ func (c *WAFLogsController) GetSiteLogs() {
 	// Parse dates if provided
 	var startTime, endTime time.Time
 	if startDate != "" {
-		startTime, err = time.Parse("2006-01-02", startDate)
+		startTime, err = time.Parse(time.RFC3339, startDate)
 		if err != nil {
-			c.Data["json"] = map[string]interface{}{
-				"success": false,
-				"message": "Invalid start date format. Use YYYY-MM-DD",
+			// Try fallback to simple date format if ISO format fails
+			startTime, err = time.Parse("2006-01-02", startDate)
+			if err != nil {
+				c.Data["json"] = map[string]interface{}{
+					"success": false,
+					"message": "Invalid start date format. Use YYYY-MM-DD or ISO format",
+				}
+				c.ServeJSON()
+				return
 			}
-			c.ServeJSON()
-			return
 		}
 	}
 
@@ -260,10 +269,10 @@ func (c *WAFLogsController) GetSiteLogs() {
 
 	// Add date range filters
 	if !startTime.IsZero() {
-		filters["created_at__gte"] = startTime
+		filters["start_date"] = startTime // Changed from "created_at" to "start_date"
 	}
 	if !endTime.IsZero() {
-		filters["created_at__lte"] = endTime
+		filters["end_date"] = endTime // Changed from "created_at" to "end_date"
 	}
 
 	// Query logs

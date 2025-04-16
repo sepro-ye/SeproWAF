@@ -1,7 +1,7 @@
 package services
 
 import (
-	"SeproWAF/db"
+	db "SeproWAF/database"
 	"SeproWAF/models"
 	"encoding/json"
 	"fmt"
@@ -217,7 +217,16 @@ func (s *WAFLogService) processBatchInWorker(entries []*WAFLogEntry) {
 	}
 
 	// Get connection from pool
-	o := db.GetPool().GetOrm()
+	pool := db.GetPool()
+	if pool == nil {
+		logs.Error("Database pool is nil!")
+		return
+	}
+	o := pool.GetOrm()
+	if o == nil {
+		logs.Error("ORM object is nil!")
+		return
+	}
 
 	// Use bulk insert instead of individual inserts
 	tx, err := o.Begin()
@@ -226,10 +235,11 @@ func (s *WAFLogService) processBatchInWorker(entries []*WAFLogEntry) {
 		return
 	}
 
-	// Prepare bulk insert SQL
-	bulkLogs := make([]orm.Params, 0, len(entries))
+	// Create collections for logs and details
+	wafLogs := make([]*models.WAFLog, 0, len(entries))
 	var bulkDetails []*models.WAFLogDetail
 
+	// Create all log objects first
 	for _, entry := range entries {
 		log, details := s.createLogObjects(entry)
 
@@ -245,106 +255,129 @@ func (s *WAFLogService) processBatchInWorker(entries []*WAFLogEntry) {
 			log.ProcessingTime = 0
 		}
 
-		// Add to bulk insert params
-		bulkLogs = append(bulkLogs, orm.Params{
-			"transaction_id":    log.TransactionID,
-			"site_id":           log.SiteID,
-			"domain":            log.Domain,
-			"client_ip":         log.ClientIP,
-			"method":            log.Method,
-			"uri":               log.URI,
-			"query_string":      log.QueryString,
-			"protocol":          log.Protocol,
-			"user_agent":        log.UserAgent,
-			"referer":           log.Referer,
-			"ja4_fingerprint":   log.JA4Fingerprint,
-			"action":            log.Action,
-			"status_code":       log.StatusCode,
-			"block_status_code": log.BlockStatusCode,
-			"response_size":     log.ResponseSize,
-			"matched_rules":     log.MatchedRules,
-			"severity":          log.Severity,
-			"category":          log.Category,
-			"processing_time":   log.ProcessingTime,
-			"created_at":        time.Now(),
-		})
+		// Add to the logs collection
+		wafLogs = append(wafLogs, log)
 
-		// Add details if needed and enabled
-		// Skip this for performance if not needed
+		// Save details if needed and enabled
 		if s.logDetails && len(details) > 0 && len(entries) < 1000 {
 			bulkDetails = append(bulkDetails, details...)
 		}
 	}
 
-	// An alternative approach using models
-	var logRecords []*models.WAFLog // Define the variable with the appropriate type
-	if len(bulkLogs) > 0 {
-		// Change variable name from 'logs' to 'logRecords' to avoid conflict with beego/logs
-		// Insert the logs and get the records back
-		logRecords = make([]*models.WAFLog, len(bulkLogs))
-		for i, log := range bulkLogs {
-			// Create model instance
-			logRecords[i] = &models.WAFLog{
-				SiteID:          log["site_id"].(int),
-				TransactionID:   log["transaction_id"].(string),
-				Domain:          log["domain"].(string),
-				ClientIP:        log["client_ip"].(string),
-				Method:          log["method"].(string),
-				URI:             log["uri"].(string),
-				QueryString:     log["query_string"].(string),
-				Protocol:        log["protocol"].(string),
-				UserAgent:       log["user_agent"].(string),
-				Referer:         log["referer"].(string),
-				JA4Fingerprint:  log["ja4_fingerprint"].(string),
-				Action:          log["action"].(string),
-				StatusCode:      log["status_code"].(int),
-				BlockStatusCode: log["block_status_code"].(int),
-				ResponseSize:    log["response_size"].(int64),
-				MatchedRules:    log["matched_rules"].(string),
-				Severity:        log["severity"].(string),
-				Category:        log["category"].(string),
-				ProcessingTime:  log["processing_time"].(int),
-				CreatedAt:       log["created_at"].(time.Time),
-			}
-		}
-
-		_, err := tx.InsertMulti(len(logRecords), logRecords)
+	// Insert all logs at once using ORM
+	if len(wafLogs) > 0 {
+		// Use ORM's InsertMulti for bulk insertion
+		_, err := tx.InsertMulti(len(wafLogs), wafLogs)
 		if err != nil {
 			logs.Error("Failed to bulk insert WAF logs: %v", err)
 			tx.Rollback()
 			return
 		}
-	}
 
-	// Execute bulk insert for details
-	if len(bulkDetails) > 0 {
-		// First, we need to link the details to their parent logs
-		// We need to get the IDs of the newly inserted logs
-		for _, detail := range bulkDetails {
-			// Find the corresponding log by transaction ID
-			for _, logRecord := range logRecords {
-				if detail.TransactionID == logRecord.TransactionID {
-					detail.WAFLogID = int64(logRecord.ID)
-					break
+		// Now we need to query the inserted logs to get their IDs
+		var txIDs []string
+		txToLogMap := make(map[string]int64)
+
+		// Collect transaction IDs for querying
+		for _, log := range wafLogs {
+			txIDs = append(txIDs, log.TransactionID)
+		}
+
+		// Query to get the actual database IDs by transaction IDs
+		var queryLogs []*models.WAFLog
+
+		// Handle transaction IDs - use Raw SQL for IN condition since Beego's ORM doesn't support it directly
+		if len(txIDs) > 0 {
+			// Create a transaction ID placeholder list (?,?,?) for the SQL
+			placeholders := ""
+			params := []interface{}{}
+
+			for i, txID := range txIDs {
+				if i > 0 {
+					placeholders += ","
+				}
+				placeholders += "?"
+				params = append(params, txID)
+			}
+
+			// Use model's TableName method to get correct table name
+			tableName := new(models.WAFLog).TableName()
+
+			// Modify the SQL query to remove the time filter
+			sql := fmt.Sprintf("SELECT * FROM %s WHERE transaction_id IN (%s)",
+				tableName, placeholders)
+
+			// Change this line to use the transaction for querying:
+			_, err = tx.Raw(sql, params...).QueryRows(&queryLogs)
+
+			if err != nil {
+				logs.Error("Failed to query inserted logs: %v", err)
+				// Continue anyway, but details might not link correctly
+			} else {
+				// Create mapping from transaction ID to database ID
+				for _, log := range queryLogs {
+					txToLogMap[log.TransactionID] = int64(log.ID)
+				}
+			}
+		} else {
+			logs.Warning("No transaction IDs to query")
+		}
+
+		// Process details if needed
+		if len(bulkDetails) > 0 {
+			validDetails := make([]*models.WAFLogDetail, 0, len(bulkDetails))
+
+			// Set the correct WAF log IDs for each detail
+			for _, detail := range bulkDetails {
+				if logID, exists := txToLogMap[detail.TransactionID]; exists {
+					detail.WAFLogID = logID
+					validDetails = append(validDetails, detail)
+				} else {
+					logs.Warning("Could not find parent log for detail with transaction ID: %s", detail.TransactionID)
+				}
+			}
+
+			// Insert details if we have any valid ones
+			if len(validDetails) > 0 {
+				_, err = tx.InsertMulti(len(validDetails), validDetails)
+				if err != nil {
+					logs.Warning("Failed to insert WAF log details: %v", err)
+					// Continue despite errors in details
+				} else {
 				}
 			}
 		}
-
-		// Now insert the details
-		_, err := tx.InsertMulti(len(bulkDetails), bulkDetails)
-		if err != nil {
-			logs.Warning("Failed to insert WAF log details: %v", err)
-			// Continue execution even if details insertion fails
-		} else {
-			logs.Debug("Successfully inserted %d WAF log details", len(bulkDetails))
-		}
 	}
 
+	// Commit the transaction
 	err = tx.Commit()
 	if err != nil {
 		logs.Error("Failed to commit transaction for WAF log batch: %v", err)
 		tx.Rollback()
 	}
+}
+
+// Helper function to create SQL value placeholders like ($1,$2,$3),($4,$5,$6)
+func createValuePlaceholders(numRows, numCols int) string {
+	var result strings.Builder
+
+	for i := 0; i < numRows; i++ {
+		if i > 0 {
+			result.WriteString(", ")
+		}
+		result.WriteString("(")
+
+		for j := 0; j < numCols; j++ {
+			if j > 0 {
+				result.WriteString(", ")
+			}
+			result.WriteString(fmt.Sprintf("$%d", i*numCols+j+1))
+		}
+
+		result.WriteString(")")
+	}
+
+	return result.String()
 }
 
 // processBatches handles batch processing periodically
@@ -573,7 +606,6 @@ func (s *WAFLogService) createLogObjects(entry *WAFLogEntry) (*models.WAFLog, []
 			}
 		}
 	}
-
 	return log, details
 }
 
@@ -736,17 +768,50 @@ func (s *WAFLogService) QueryLogs(filters map[string]interface{}, page, pageSize
 	// Apply filters
 	for key, value := range filters {
 		if value != nil {
-			qs = qs.Filter(key, value)
+			// Special handling for date ranges
+			if key == "start_date" {
+				// Convert to time.Time if it's a string
+				if startDate, ok := value.(string); ok {
+					t, err := time.Parse("2006-01-02", startDate)
+					if err == nil {
+						// Use greater than or equal for start date
+						qs = qs.Filter("created_at__gte", t)
+					} else {
+						logs.Error("Invalid start_date format: %v", err)
+					}
+				} else if t, ok := value.(time.Time); ok {
+					qs = qs.Filter("created_at__gte", t)
+				}
+			} else if key == "end_date" {
+				// Convert to time.Time if it's a string
+				if endDate, ok := value.(string); ok {
+					t, err := time.Parse("2006-01-02", endDate)
+					if err == nil {
+						// Add one day to include the entire end date (until 23:59:59)
+						t = t.AddDate(0, 0, 1)
+						// Use less than for end date
+						qs = qs.Filter("created_at__lt", t)
+					} else {
+						logs.Error("Invalid end_date format: %v", err)
+					}
+				} else if t, ok := value.(time.Time); ok {
+					// Add one day to include the entire end date
+					t = t.AddDate(0, 0, 1)
+					qs = qs.Filter("created_at__lt", t)
+				}
+			} else {
+				// Regular equality filter for other fields
+				qs = qs.Filter(key, value)
+			}
 		}
 	}
 
-	// Get total count
+	// Rest of the function remains the same
 	count, err := qs.Count()
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// Get records with pagination
 	var logs []*models.WAFLog
 	_, err = qs.OrderBy("-created_at").Limit(pageSize, (page-1)*pageSize).All(&logs)
 	if err != nil {

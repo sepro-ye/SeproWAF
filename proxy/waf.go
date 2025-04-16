@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -14,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"SeproWAF/db"
+	db "SeproWAF/database"
 	"SeproWAF/models"
 	"SeproWAF/services"
 
@@ -250,8 +249,19 @@ func (wm *WAFManager) ReloadWAF(siteID int) error {
 	wm.mutex.Lock()
 	defer wm.mutex.Unlock()
 
-	// Remove the current WAF instance
-	delete(wm.wafInstances, siteID)
+	// Load a new WAF instance with updated rules
+	waf, err := wm.LoadRulesWithCustomRules(siteID)
+	if err != nil {
+		return fmt.Errorf("failed to reload WAF rules: %v", err)
+	}
+
+	// Update the WAF instance in the map
+	wm.wafInstances[siteID] = waf
+
+	// Update rule version timestamp
+	ruleMutex.Lock()
+	ruleVersions[siteID] = time.Now().UnixNano()
+	ruleMutex.Unlock()
 
 	return nil
 }
@@ -299,8 +309,13 @@ var (
 // WAFHandler creates an HTTP handler with WAF protection
 func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Generate a cache key from request properties
-		cacheKey := fmt.Sprintf("%s:%s:%s:%s", siteDomain, r.Method, r.URL.Path, r.RemoteAddr)
+		// Generate a more complete cache key including query parameters
+		cacheKey := fmt.Sprintf("%s:%s:%s%s:%s",
+			siteDomain,
+			r.Method,
+			r.URL.Path,
+			r.URL.RawQuery, // Include query parameters
+			r.RemoteAddr)
 
 		// Check cache for recent identical requests
 		wafDecisionCacheMutex.RLock()
@@ -319,16 +334,15 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 			return
 		}
 
-		// Sampling for performance under heavy load (adjust percentage as needed)
-		shouldSample := rand.Intn(100) < 95 // 95% of requests processed by WAF
+		// For testing purposes, process all requests through the WAF
+		// When in production, you can consider re-enabling sampling
+		shouldSample := true // Process all requests
 
 		if !shouldSample {
 			// Skip WAF for sampled requests when under heavy load
 			next.ServeHTTP(w, r)
 			return
 		}
-
-		// Debug logging for every incoming request
 
 		startTime := time.Now()
 
@@ -431,10 +445,14 @@ func (wm *WAFManager) WAFHandler(next http.Handler, siteID int, siteDomain strin
 		// Process request body phase
 		tx.ProcessRequestBody()
 
-		// Check if the request should be blocked after body processing
+		// Check interruption more verbosely
 		if intervention := tx.Interruption(); intervention != nil {
-			logs.Warning("WAF blocked request to %s after body processing: %s (status: %d)",
-				siteDomain, intervention.Action, intervention.Status)
+			logs.Warning("WAF blocked request to %s after body processing: %s (status: %d, rule: %d, msg: %s)",
+				siteDomain,
+				intervention.Action,
+				intervention.Status,
+				intervention.RuleID,
+				intervention.Data)
 
 			// Log WAF blocking event
 			wafLogService.LogWAFEvent(
@@ -612,8 +630,6 @@ func (rww *responseWriterWrapper) Write(b []byte) (int, error) {
 func (wm *WAFManager) CheckForRuleUpdates() {
 	// Try to acquire the mutex with a timeout, but use a non-blocking approach first
 	if !wm.tryLockRuleDb() {
-		logs.Debug("Rule update mutex is locked, will try with timeout")
-
 		// Try with timeout
 		lockChan := make(chan struct{}, 1)
 		go func() {
@@ -661,7 +677,6 @@ func (wm *WAFManager) CheckForRuleUpdates() {
 	// Check each site for rule updates
 	for _, site := range sites {
 		if wm.RulesNeedReload(site.ID) {
-			logs.Info("Rules for site %d need reload, reloading...", site.ID)
 			if err := wm.ReloadWAF(site.ID); err != nil {
 				logs.Warning("Failed to reload WAF for site %d: %v", site.ID, err)
 			}

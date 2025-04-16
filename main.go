@@ -3,7 +3,6 @@ package main
 import (
 	"SeproWAF/controllers"
 	"SeproWAF/database"
-	"SeproWAF/db"
 	"SeproWAF/models"
 	"SeproWAF/proxy"
 	_ "SeproWAF/routers"
@@ -30,7 +29,7 @@ func init() {
 	}
 
 	// Initialize the database connection pool
-	pool := db.GetPool()
+	pool := database.GetPool()
 
 	// Configure based on app.conf settings
 	maxIdle, _ := beego.AppConfig.Int("DBMaxIdleConns")

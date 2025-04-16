@@ -112,19 +112,26 @@
                         </div>
                     </div>
                     <div class="w-full md:w-1/4 px-2 mb-3">
-                        <label for="start_date" class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                        <label for="start_date" class="block text-sm font-medium text-gray-700 mb-1">Start Date & Time</label>
                         <div class="relative">
                             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                 <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                 </svg>
                             </div>
-                            <input type="date" id="start_date" name="start_date" class="block w-full pl-10 pr-3 py-2 rounded-md border-gray-300 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            <input type="datetime-local" id="start_date" name="start_date" step="1" class="block w-full pl-10 pr-3 py-2 rounded-md border-gray-300 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                         </div>
                     </div>
                     <div class="w-full md:w-1/4 px-2 mb-3">
-                        <label for="end_date" class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                        <input type="date" id="end_date" name="end_date" class="block w-full mt-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        <label for="end_date" class="block text-sm font-medium text-gray-700 mb-1">End Date & Time</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                            </div>
+                            <input type="datetime-local" id="end_date" name="end_date" step="1" class="block w-full pl-10 pr-3 py-2 rounded-md border-gray-300 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
                     </div>
                     <div class="w-full flex justify-end px-2">
                         <button type="button" id="clearFiltersBtn" class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded mr-2">
@@ -233,7 +240,26 @@ document.addEventListener('DOMContentLoaded', function() {
     
     document.getElementById('clearFiltersBtn').addEventListener('click', function() {
         document.getElementById('logFilterForm').reset();
+        // Reset the date fields explicitly
+        document.getElementById('start_date').value = '';
+        document.getElementById('end_date').value = '';
         currentPage = 1;
+        timeRange = '24h'; // Reset to default time range
+        
+        // Update the active button in time range selector
+        document.querySelectorAll('#time-range-selector button').forEach(btn => {
+            if (btn.dataset.range === timeRange) {
+                btn.classList.add('active', 'bg-gray-100');
+                btn.classList.remove('bg-white');
+            } else {
+                btn.classList.remove('active', 'bg-gray-100');
+                btn.classList.add('bg-white');
+            }
+        });
+        
+        // Set default date range
+        setDateRangeFromPreset(timeRange);
+        
         loadLogs();
     });
     
@@ -267,6 +293,19 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Functions
+    function formatDatetime(date) {
+        // Format date for datetime-local input (YYYY-MM-DDThh:mm:ss)
+        // This formats the date in the local timezone, which is what datetime-local expects
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        
+        return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+    }
+
     function setDateRangeFromPreset(range) {
         const now = new Date();
         const startDateInput = document.getElementById('start_date');
@@ -276,8 +315,8 @@ document.addEventListener('DOMContentLoaded', function() {
         startDateInput.value = '';
         endDateInput.value = '';
         
-        // Set end date to today
-        const endDate = formatDate(now);
+        // Set end date to now with time component
+        const endDate = formatDatetime(now);
         endDateInput.value = endDate;
         
         // Set start date based on range
@@ -285,26 +324,22 @@ document.addEventListener('DOMContentLoaded', function() {
         switch(range) {
             case '24h':
                 const yesterday = new Date(now);
-                yesterday.setDate(now.getDate() - 1);
-                startDate = formatDate(yesterday);
+                yesterday.setHours(now.getHours() - 24);
+                startDate = formatDatetime(yesterday);
                 break;
             case '7d':
                 const sevenDaysAgo = new Date(now);
                 sevenDaysAgo.setDate(now.getDate() - 7);
-                startDate = formatDate(sevenDaysAgo);
+                startDate = formatDatetime(sevenDaysAgo);
                 break;
             case '30d':
                 const thirtyDaysAgo = new Date(now);
                 thirtyDaysAgo.setDate(now.getDate() - 30);
-                startDate = formatDate(thirtyDaysAgo);
+                startDate = formatDatetime(thirtyDaysAgo);
                 break;
         }
         
         startDateInput.value = startDate;
-    }
-    
-    function formatDate(date) {
-        return date.toISOString().split('T')[0];
     }
     
     async function loadSites() {
@@ -344,15 +379,43 @@ document.addEventListener('DOMContentLoaded', function() {
         const formData = new FormData(document.getElementById('logFilterForm'));
         const params = new URLSearchParams();
         
-        // Add form data to params
+        // Add form data to params with proper handling of datetime inputs
         for (const [key, value] of formData.entries()) {
-            if (value) params.append(key, value);
+            if (value) {
+                // For datetime-local inputs, we need to handle the date conversion properly
+                if (key === 'start_date' || key === 'end_date') {
+                    try {
+                        const dateObj = new Date(value);
+                        if (!isNaN(dateObj.getTime())) {
+                            // Format the date as if it's in +03:00 without altering time
+                            const pad = (num) => String(num).padStart(2, '0');
+                            const year = dateObj.getFullYear();
+                            const month = pad(dateObj.getMonth() + 1);
+                            const day = pad(dateObj.getDate());
+                            const hours = pad(dateObj.getHours());
+                            const minutes = pad(dateObj.getMinutes());
+                            const seconds = pad(dateObj.getSeconds());
+
+                            // Just append +03:00 without offsetting the date
+                            const formatted = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+03:00`;
+
+                            params.append(key, formatted);
+                        } else {
+                            console.warn(`Invalid date for ${key}: ${value}`);
+                        }
+                    } catch (e) {
+                        console.error(`Error parsing date for ${key}: ${e.message}`);
+                    }
+                } else {
+                    params.append(key, value);
+                }
+            }
         }
         
         // Add pagination
         params.append('page', currentPage);
         params.append('page_size', pageSize);
-        
+                
         // Show loading
         document.getElementById('logs-loading').classList.remove('hidden');
         document.getElementById('logs-table').classList.add('hidden');

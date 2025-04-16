@@ -1,7 +1,7 @@
 package proxy
 
 import (
-	"SeproWAF/db"
+	db "SeproWAF/database"
 	"SeproWAF/models"
 	"context"
 	"crypto/tls"
@@ -57,18 +57,15 @@ type CertificateManager struct {
 func JA4Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check if the request is over TLS
-		logs.Debug("JA4+ function running")
 		if r.TLS != nil {
 			// Assuming you have a way to extract ClientHelloInfo
 			clientHelloInfo := extractClientHelloInfo(r.TLS) // Extract ClientHelloInfo
-			logs.Debug("JA4+")
 			// Compute JA4 hash from the client hello info
 			ja4Hash := ja4plus.JA4(clientHelloInfo)
 
 			if ja4Hash != "" {
 				// Add JA4 header to the request
 				r.Header.Set("X-JA4", ja4Hash)
-				logs.Debug("JA4+ computed")
 			} else {
 				log.Printf("Error computing JA4 hash")
 			}
@@ -352,7 +349,6 @@ func (ps *ProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// If site not found, return 404
 	if !exists {
-		logs.Debug("Domain not found: %s", host)
 		http.Error(w, "Site not found", http.StatusNotFound)
 		return
 	}
