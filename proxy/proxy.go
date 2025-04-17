@@ -31,7 +31,7 @@ type ProxyServer struct {
 	defaultHost string
 	tlsConfig   *tls.Config
 	wafManager  *WAFManager // Added WAF manager
-
+	luaManager  *LuaManager
 }
 
 // SiteProxy represents a site's proxy configuration
@@ -176,6 +176,12 @@ func NewProxyServer(httpPort, httpsPort int) *ProxyServer {
 		logs.Info("Coraza WAF manager initialized successfully")
 	}
 
+	luaManager, err := NewLuaManagerFromDir("rules/lua_rules")
+	if err != nil {
+		logs.Error("Lua manager failed to initialize: %v", err)
+	} else {
+		logs.Info("Lua manager initialized")
+	}
 	server := &ProxyServer{
 		domainMap:   make(map[string]*SiteProxy),
 		mapMutex:    sync.RWMutex{},
@@ -185,6 +191,7 @@ func NewProxyServer(httpPort, httpsPort int) *ProxyServer {
 		defaultHost: "localhost",
 		tlsConfig:   tlsConfig,
 		wafManager:  wafManager,
+		luaManager:  luaManager,
 	}
 
 	// Create HTTP server
@@ -357,6 +364,23 @@ func (ps *ProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Update last access time
 	siteProxy.LastAccessedTime = time.Now()
 
+	//Lua decision
+	if ps.luaManager != nil {
+		blocked, ruleName, err := ps.luaManager.EvaluateRequest(r)
+		logs.Debug("returue")
+		if err != nil {
+			logs.Warning("Lua error: %v", err)
+		} else if blocked {
+			logs.Debug("returned true")
+
+			logs.Warn("🔒 Blocked by Lua rule: %s | URI: %s | IP: %s", ruleName, r.RequestURI, r.RemoteAddr)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprintf(w, `{"status": "forbidden", "blocked_by": "%s"}`, ruleName)
+			return
+		}
+	}
+
 	// Check if we should redirect HTTP to HTTPS
 	if r.TLS == nil && siteProxy.UseHTTPS {
 		// Create the HTTPS URL with the correct port
@@ -387,13 +411,6 @@ func (ps *ProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			logs.Error("Failed to update request count for site %d: %v", siteID, err)
 		}
 	}(siteProxy.Site.ID)
-
-	// Apply WAF if enabled for this site and WAF manager is available
-	// if siteProxy.WAFEnabled && ps.wafManager != nil {
-	// 	wafHandler := ps.wafManager.WAFHandler(siteProxy.ReverseProxy, siteProxy.Site.ID, siteProxy.Site.Domain)
-	// 	wafHandler.ServeHTTP(w, r)
-	// 	return
-	// }
 
 	// Apply WAF if enabled for this site and WAF manager is available
 	if siteProxy.WAFEnabled && ps.wafManager != nil {
