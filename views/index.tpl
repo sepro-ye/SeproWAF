@@ -1,70 +1,117 @@
-<div class="max-w-7xl mx-auto px-4 py-12 md:py-16 my-8">
-    <div class="grid md:grid-cols-2 gap-8 items-center">
-        <!-- Hero Text Content -->
-        <div class="text-center md:text-left">
-            <h1 class="text-4xl md:text-5xl font-bold text-slate-800 leading-tight mb-4">Web Application Firewall as a Service</h1>
-            <p class="text-lg md:text-xl text-slate-600 mb-8">
-                Protect your web applications from attacks with our easy-to-use WAF. Deploy in minutes, get instant protection against SQL injection, XSS, and other common threats.
-            </p>
-            <div class="flex flex-col sm:flex-row gap-3 justify-center md:justify-start">
-                {{if .IsAuthenticated}}
-                <a href="/dashboard" class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-3 rounded-lg transition-colors duration-200">Dashboard</a>
-                <a href="/waf/sites" class="inline-block bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 font-medium px-6 py-3 rounded-lg transition-colors duration-200">Manage Sites</a>
-                {{else}}
-                <a href="/auth/register" class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-3 rounded-lg transition-colors duration-200">Get Started</a>
-                <a href="/auth/login" class="inline-block bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 font-medium px-6 py-3 rounded-lg transition-colors duration-200">Login</a>
-                {{end}}
-            </div>
+<!-- Full-width hero section with space theme -->
+<div class="relative overflow-hidden bg-slate-900 min-h-screen">
+    <!-- Background with space/planet effect -->
+    <div class="absolute inset-0 z-0">
+        <div class="absolute inset-0 bg-gradient-to-b from-indigo-900/20 to-slate-900"></div>
+        <div class="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-t from-slate-900 to-transparent"></div>
+        <div class="absolute top-1/4 right-1/4 w-96 h-96 rounded-full bg-indigo-700/20 blur-3xl"></div>
+        <div class="absolute top-1/3 left-1/3 w-96 h-96 rounded-full bg-blue-700/20 blur-3xl"></div>
+    </div>
+
+
+    <!-- Hero section -->
+    <div class="relative z-10 max-w-7xl mx-auto px-4 pt-40 pb-32 sm:px-6 lg:px-8 flex flex-col items-center">
+        <h1 class="text-4xl sm:text-5xl md:text-6xl font-bold text-white text-center leading-tight mb-6">
+            Secure your applications <br class="hidden md:block">with enterprise-grade WAF
+        </h1>
+        <p class="text-lg sm:text-xl text-slate-300 text-center mb-10 max-w-3xl">
+            Protect your web applications from OWASP top 10 threats with advanced WAF capabilities, real-time monitoring, and customized security rules.
+        </p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+            {{if .IsAuthenticated}}
+            <a href="/waf/sites" class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-medium px-8 py-3 rounded-lg transition-colors duration-200 text-center">
+                Manage protected sites
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline ml-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+            </a>
+            <a href="#features" class="inline-block bg-slate-700 hover:bg-slate-800 text-white font-medium px-8 py-3 rounded-lg transition-colors duration-200 text-center">
+                Learn more
+            </a>
+            {{else}}
+            <a href="/auth/register" class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-medium px-8 py-3 rounded-lg transition-colors duration-200 text-center">
+                Get started free
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline ml-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+            </a>
+            <a href="/auth/login" class="inline-block bg-slate-700 hover:bg-slate-800 text-white font-medium px-8 py-3 rounded-lg transition-colors duration-200 text-center">
+                Login
+            </a>
+            {{end}}
         </div>
-        <!-- Hero Image -->
-        <div class="mt-8 md:mt-0">
-            <img src="/static/img/waf-illustration.svg" class="max-w-full h-auto mx-auto" alt="WAF Illustration" width="700" height="500" loading="lazy">
+    </div>
+
+    <!-- Dashboard preview mockup -->
+    <div class="relative z-10 max-w-6xl mx-auto px-4">
+        <div class="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg shadow-2xl overflow-hidden">
+            <div class="p-2">
+                <div class="flex items-center gap-1 absolute left-4 top-4">
+                    <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                </div>
+                <img src="/static/img/dash-screen.png" alt="SeproWAF Dashboard" class="w-full rounded" />
+            </div>
         </div>
     </div>
 </div>
 
 <!-- Features Section -->
-<div class="max-w-7xl mx-auto px-4 py-12" id="features">
-    <h2 class="text-3xl font-bold text-center md:text-left text-slate-800 pb-3 border-b border-gray-200 mb-10">Key Features</h2>
-    
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mt-8">
-        <!-- Feature 1 -->
-        <div class="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300">
-            <div class="w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center mb-5">
-                <i class="bi bi-shield-check text-2xl"></i>
-            </div>
-            <h3 class="text-xl font-semibold text-slate-800 mb-3">Protection Against Attacks</h3>
-            <p class="text-slate-600">Guard against OWASP Top 10 vulnerabilities including SQL injection, XSS, CSRF, and more.</p>
+<div class="bg-slate-100 py-24" id="features">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="text-center mb-20">
+            <h2 class="text-3xl font-bold text-slate-800">Advanced Web Protection Features</h2>
+            <p class="mt-4 text-xl text-slate-600 max-w-3xl mx-auto">
+                SeproWAF provides comprehensive protection against the most critical web application security risks.
+            </p>
         </div>
         
-        <!-- Feature 2 -->
-        <div class="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300">
-            <div class="w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center mb-5">
-                <i class="bi bi-speedometer2 text-2xl"></i>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mt-8">
+            <!-- Feature 1 -->
+            <div class="bg-white p-8 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300">
+                <div class="w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center mb-5">
+                    <i class="bi bi-shield-check text-2xl"></i>
+                </div>
+                <h3 class="text-xl font-semibold text-slate-800 mb-3">OWASP Top 10 Protection</h3>
+                <p class="text-slate-600">Defend against SQL injection, XSS, CSRF, and other critical vulnerabilities with proven rule sets based on OWASP Core Rule Set.</p>
             </div>
-            <h3 class="text-xl font-semibold text-slate-800 mb-3">Real-time Monitoring</h3>
-            <p class="text-slate-600">Get instant notifications about attacks and monitor your applications' traffic in real-time.</p>
-        </div>
-        
-        <!-- Feature 3 -->
-        <div class="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300">
-            <div class="w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center mb-5">
-                <i class="bi bi-gear text-2xl"></i>
+            
+            <!-- Feature 2 -->
+            <div class="bg-white p-8 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300">
+                <div class="w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center mb-5">
+                    <i class="bi bi-speedometer2 text-2xl"></i>
+                </div>
+                <h3 class="text-xl font-semibold text-slate-800 mb-3">Real-time Threat Detection</h3>
+                <p class="text-slate-600">Monitor and analyze traffic in real time with detailed logs and instant notifications about potential security incidents.</p>
             </div>
-            <h3 class="text-xl font-semibold text-slate-800 mb-3">Easy Management</h3>
-            <p class="text-slate-600">Simple interface to manage protected sites, security rules, and view comprehensive logs.</p>
+            
+            <!-- Feature 3 -->
+            <div class="bg-white p-8 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300">
+                <div class="w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center mb-5">
+                    <i class="bi bi-gear text-2xl"></i>
+                </div>
+                <h3 class="text-xl font-semibold text-slate-800 mb-3">Custom Rule Management</h3>
+                <p class="text-slate-600">Create and manage custom security rules tailored to your specific application requirements and security needs.</p>
+            </div>
         </div>
     </div>
 </div>
 
 <!-- Testimonials Section -->
-<div class="bg-gray-50 py-16">
+<div class="bg-white py-24">
     <div class="max-w-7xl mx-auto px-4">
-        <h2 class="text-3xl font-bold text-center text-slate-800 mb-12">Trusted by Security Professionals</h2>
+        <div class="text-center mb-16">
+            <h2 class="text-3xl font-bold text-slate-800 mb-4">Trusted by Security Professionals</h2>
+            <p class="text-xl text-slate-600 max-w-3xl mx-auto">
+                Security teams rely on SeproWAF for robust protection against evolving threats.
+            </p>
+        </div>
         
         <div class="grid md:grid-cols-3 gap-8">
+            <!-- Testimonials remain the same - they're already relevant to the project -->
             <!-- Testimonial 1 -->
-            <div class="bg-white p-6 rounded-xl shadow-sm">
+            <div class="bg-slate-50 p-6 rounded-xl shadow-sm">
                 <div class="flex items-center mb-4">
                     <div class="text-yellow-400 flex">
                         <i class="bi bi-star-fill"></i>
@@ -83,7 +130,7 @@
             </div>
             
             <!-- Testimonial 2 -->
-            <div class="bg-white p-6 rounded-xl shadow-sm">
+            <div class="bg-slate-50 p-6 rounded-xl shadow-sm">
                 <div class="flex items-center mb-4">
                     <div class="text-yellow-400 flex">
                         <i class="bi bi-star-fill"></i>
@@ -102,7 +149,7 @@
             </div>
             
             <!-- Testimonial 3 -->
-            <div class="bg-white p-6 rounded-xl shadow-sm">
+            <div class="bg-slate-50 p-6 rounded-xl shadow-sm">
                 <div class="flex items-center mb-4">
                     <div class="text-yellow-400 flex">
                         <i class="bi bi-star-fill"></i>
@@ -124,8 +171,8 @@
 </div>
 
 <!-- CTA Section -->
-<div class="max-w-7xl mx-auto px-4 py-16">
-    <div class="bg-blue-600 rounded-2xl shadow-xl p-8 md:p-12 text-center">
+<div class="bg-blue-600 py-16">
+    <div class="max-w-7xl mx-auto px-4 text-center">
         <h2 class="text-3xl font-bold text-white mb-4">Ready to secure your applications?</h2>
         <p class="text-blue-100 text-lg mb-8 max-w-3xl mx-auto">Join thousands of organizations that trust SeproWAF to protect their web applications from emerging threats.</p>
         <div class="flex flex-col sm:flex-row justify-center gap-4">

@@ -340,3 +340,40 @@ func (c *WAFLogsController) GetSiteLogs() {
 	}
 	c.ServeJSON()
 }
+
+// SummarizeLogs returns a GenAI-generated summary and anomaly report for recent logs
+func (c *WAFLogsController) SummarizeLogs() {
+	// Parse optional date filters
+	startDate := c.GetString("start_date", "")
+	endDate := c.GetString("end_date", "")
+	filters := make(map[string]interface{})
+	// Add date filters if provided
+	if startDate != "" {
+		if t, err := time.Parse(time.RFC3339, startDate); err == nil {
+			filters["start_date"] = t
+		}
+	}
+	if endDate != "" {
+		if t, err := time.Parse(time.RFC3339, endDate); err == nil {
+			filters["end_date"] = t
+		}
+	}
+	// Fetch recent logs (limit to 100 entries)
+	logsSlice, _, err := services.GetWAFLogService().QueryLogs(filters, 1, 100)
+	if err != nil {
+		c.Data["json"] = map[string]interface{}{"success": false, "message": "Failed to query logs: " + err.Error()}
+		c.ServeJSON()
+		return
+	}
+	// Generate summary using GenAI
+	genaiSvc := services.NewGenAIService()
+	summary, err := genaiSvc.GenerateLogReport(logsSlice)
+	if err != nil {
+		c.Data["json"] = map[string]interface{}{"success": false, "message": "GenAI summary error: " + err.Error()}
+		c.ServeJSON()
+		return
+	}
+	// Return the summary
+	c.Data["json"] = map[string]interface{}{"success": true, "summary": summary}
+	c.ServeJSON()
+}

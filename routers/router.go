@@ -68,6 +68,9 @@ func init() {
 	web.Router("/api/waf/test-rule", &controllers.WAFRuleController{}, "post:TestRule")
 
 	// WAF logs routes
+	// WAF logs summary (GenAI)
+	web.Router("/api/waf/logs/summary", &controllers.WAFLogsController{}, "get:SummarizeLogs")
+
 	web.Router("/api/waf/logs", &controllers.WAFLogsController{}, "get:GetLogs")
 	web.Router("/api/sites/:id/logs", &controllers.WAFLogsController{}, "get:GetSiteLogs")
 	web.Router("/api/waf/logs/:id", &controllers.WAFLogsController{}, "get:GetLogDetails")
