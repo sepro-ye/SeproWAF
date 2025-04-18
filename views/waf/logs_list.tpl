@@ -12,6 +12,9 @@
         <button id="refreshBtn" class="ml-2 px-3 py-2 text-sm font-medium border border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white rounded">
             <i class="bi bi-arrow-clockwise"></i> Refresh
         </button>
+        <button id="summarizeLogsBtn" class="ml-2 px-3 py-2 text-sm font-medium border border-green-600 text-green-600 hover:bg-green-600 hover:text-white rounded">
+            <i class="fas fa-robot"></i> Summarize with AI
+        </button>
     </div>
 </div>
 
@@ -214,6 +217,47 @@
     </div>
 </div>
 
+<!-- AI Summary Modal -->
+<div id="summaryModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden overflow-y-auto py-4">
+    <div class="bg-white rounded-lg shadow-lg max-w-2xl w-full mx-4 overflow-hidden flex flex-col max-h-[90vh]"> 
+        <div class="px-4 py-3 border-b flex justify-between items-center flex-shrink-0">
+            <h5 class="text-lg font-medium">AI Security Log Summary</h5>
+            <button id="closeSummaryModal" class="text-gray-500 hover:text-gray-800">
+                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        <div class="px-4 py-5 overflow-y-auto" style="max-height: calc(90vh - 120px);">
+            <div id="summaryLoading" class="text-center py-4">
+                <div class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" role="status">
+                    <span class="sr-only">Loading...</span>
+                </div>
+                <p class="mt-2">Generating AI analysis of security logs...</p>
+                <p class="text-sm text-gray-500 mt-1">This may take up to 30 seconds</p>
+            </div>
+            <div id="summaryContent" class="hidden">
+                <h6 class="font-bold mb-3">Key Security Insights:</h6>
+                <div id="summaryText" class="p-3 bg-gray-100 rounded whitespace-pre-wrap"></div>
+            </div>
+            <div id="summaryError" class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 hidden">
+                <p class="font-bold" id="summaryErrorTitle">Error</p>
+                <p id="summaryErrorMessage">Failed to generate summary. Please try again later.</p>
+                <div class="mt-3">
+                    <button id="retrySummary" class="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700">
+                        Try Again
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="px-4 py-3 border-t flex justify-end flex-shrink-0">
+            <button id="closeSummaryButton" class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Variables for pagination
@@ -291,7 +335,125 @@ document.addEventListener('DOMContentLoaded', function() {
             loadLogs();
         }
     });
-    
+
+    // Summarize logs button
+    document.getElementById('summarizeLogsBtn').addEventListener('click', function() {
+        console.log("Summarize button clicked");
+        fetchSummary();
+    });
+
+    // Close modal buttons
+    document.getElementById('closeSummaryModal').addEventListener('click', function() {
+        document.getElementById('summaryModal').classList.add('hidden');
+    });
+
+    document.getElementById('closeSummaryButton').addEventListener('click', function() {
+        document.getElementById('summaryModal').classList.add('hidden');
+    });
+
+    // Retry button
+    if (document.getElementById('retrySummary')) {
+        document.getElementById('retrySummary').addEventListener('click', function() {
+            fetchSummary();
+        });
+    }
+
+    function fetchSummary() {
+        // Get active filter values
+        const formData = new FormData(document.getElementById('logFilterForm'));
+        const params = new URLSearchParams();
+        
+        // Add relevant filter parameters
+        if (formData.get('start_date')) {
+            params.append('start_date', formData.get('start_date'));
+        }
+        
+        if (formData.get('end_date')) {
+            params.append('end_date', formData.get('end_date'));
+        }
+        
+        // Show the modal
+        document.getElementById('summaryModal').classList.remove('hidden');
+        
+        // Show loading, hide content and error
+        document.getElementById('summaryLoading').classList.remove('hidden');
+        document.getElementById('summaryContent').classList.add('hidden');
+        document.getElementById('summaryError').classList.add('hidden');
+        
+        // Set a timeout in case the API call takes too long
+        const timeoutId = setTimeout(() => {
+            console.log("Local timeout triggered after waiting");
+            document.getElementById('summaryLoading').classList.add('hidden');
+            document.getElementById('summaryError').classList.remove('hidden');
+            document.getElementById('summaryErrorTitle').textContent = "Request taking too long";
+            document.getElementById('summaryErrorMessage').textContent = 
+                "The AI service is taking longer than expected to respond. You can wait or try again later.";
+        }, 35000); // 35 seconds local timeout as a fallback
+        
+        // Call the API to get summary
+        console.log("Calling API: /api/waf/logs/summary");
+        api.get('/waf/logs/summary', { params: Object.fromEntries(params) })
+            .then(response => {
+                // Clear the timeout since we got a response
+                clearTimeout(timeoutId);
+                
+                console.log("API response received:", response.data);
+                
+                if (response.data && response.data.success && response.data.summary) {
+                    // Format and display the summary
+                    const summaryText = formatSecuritySummary(response.data.summary);
+                    document.getElementById('summaryText').innerHTML = summaryText;
+                    
+                    // Hide loading, show content
+                    document.getElementById('summaryLoading').classList.add('hidden');
+                    document.getElementById('summaryContent').classList.remove('hidden');
+                } else {
+                    throw new Error('Invalid response format or empty summary');
+                }
+            })
+            .catch(error => {
+                // Clear the timeout since we got a response (even if it's an error)
+                clearTimeout(timeoutId);
+                
+                console.error('Error fetching summary:', error);
+                
+                // Hide loading, show error
+                document.getElementById('summaryLoading').classList.add('hidden');
+                document.getElementById('summaryError').classList.remove('hidden');
+                
+                // Update error message with details
+                document.getElementById('summaryErrorTitle').textContent = "Summary Generation Failed";
+                
+                // Check for specific timeout error
+                if (error.message && error.message.includes('timeout') || 
+                    (error.response && error.response.data && error.response.data.message && 
+                     error.response.data.message.includes('timeout'))) {
+                    document.getElementById('summaryErrorMessage').textContent = 
+                        "The AI service timed out. This usually happens when the service is under heavy load. Please try again in a few moments.";
+                } else if (error.response && error.response.data && error.response.data.message) {
+                    document.getElementById('summaryErrorMessage').textContent = error.response.data.message;
+                } else {
+                    document.getElementById('summaryErrorMessage').textContent = 
+                        "Failed to generate summary. " + (error.message || "Please try again later.");
+                }
+            });
+    }
+
+    // Format security summary with highlighting
+    function formatSecuritySummary(text) {
+        if (!text) return '';
+        
+        return text
+            .replace(/\n\n/g, '</p><p>')
+            .replace(/\n/g, '<br>')
+            .replace(/(CRITICAL|HIGH|MEDIUM|WARNING|ALERT|Attack[s]?|suspicious activity|anomaly|anomalies|injection|XSS|SQL)/gi, 
+                '<span class="font-bold text-red-600">$1</span>')
+            .replace(/(blocked|rejected|prevented|protected|secure)/gi, 
+                '<span class="font-bold text-green-600">$1</span>')
+            .replace(/(recommendation|should|must|advised|recommend)/gi, 
+                '<span class="font-bold text-blue-600">$1</span>');
+    }
+
     // Functions
     function formatDatetime(date) {
         // Format date for datetime-local input (YYYY-MM-DDThh:mm:ss)

@@ -30,3 +30,8 @@ WAFLogDetails = true
 WAFLogRetention = 30
 WAFLogBatchSize = 500
 WAFLogFlushInterval = 15
+
+# Google GenAI for log summarization & anomaly detection
+# Provide your Google API key and model name
+google_genai_api_key = 
+google_genai_model = gemini-2.0-flash
