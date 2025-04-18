@@ -10,6 +10,6 @@ type MainController struct {
 
 func (c *MainController) Get() {
 	c.Data["Title"] = "Home"
-	c.Layout = "layout.tpl"
+	c.Layout = "site-layout.tpl"
 	c.TplName = "index.tpl"
 }
